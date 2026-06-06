@@ -186,6 +186,7 @@ def left_pane(user_email=None, sessions=None, current_sid="", lang: str = "en"):
             A("Favorites", href="/app/favorites", cls="workspace-link"),
             A("Saved Searches", href="/app/saved-searches", cls="workspace-link"),
             A("My Garage", href="/app/garage", cls="workspace-link"),
+            A("Profile & Preferences", href="/app/profile", cls="workspace-link"),
             cls="agents-section",
         ),
         Div(auth_section, cls="auth-section"),
