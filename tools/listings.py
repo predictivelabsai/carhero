@@ -11,6 +11,22 @@ from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
 
+COUNTRY_LABELS = {
+    "GB": "UK", "DE": "Germany", "EU": "Other EU",
+    "EE": "Estonia", "LT": "Lithuania", "LV": "Latvia", "SE": "Sweden",
+}
+PROVIDER_LABELS = {
+    "autotrader": "AutoTrader UK",
+    "mobile_de": "mobile.de",
+    "autoscout24": "AutoScout24",
+    "autohero": "Autohero",
+    "theparking": "TheParking",
+    "auto24_ee": "Auto24.ee",
+    "auto24_lt": "Auto24.lt",
+    "auto24_lv": "Auto24.lv",
+    "blocket": "Blocket.se",
+}
+
 
 class SearchListingsArgs(BaseModel):
     make: Optional[str] = Field(default=None, description="Car make, e.g. BMW, Audi, Porsche")
@@ -94,19 +110,48 @@ def _search_listings(**kw) -> str:
     if not rows:
         return "No listings found matching your criteria."
 
-    results = []
+    listings = []
+    lines = []
     for r in rows:
         m = dict(r._mapping)
         price = f"EUR {m['price_eur']:,.0f}" if m.get("price_eur") else "Price N/A"
         mileage = f"{m['mileage_km']:,} km" if m.get("mileage_km") else "N/A"
-        results.append(
+        lines.append(
             f"- **{m['make']} {m['model']}** {m.get('variant') or ''} ({m.get('year', 'N/A')}) "
             f"| {price} | {mileage} | {m.get('fuel_type', '')} {m.get('transmission', '')} "
             f"| {m.get('power_hp', '')}hp | {m.get('country', '')} ({m.get('provider', '')}) "
             f"| {m.get('steering_side', '')} | {m.get('source_url', '')}"
         )
+        listings.append({
+            "id": m["id"],
+            "make": m["make"],
+            "model": m["model"],
+            "variant": m.get("variant") or "",
+            "year": m.get("year"),
+            "price_eur": round(float(m["price_eur"])) if m.get("price_eur") else None,
+            "mileage_km": int(m["mileage_km"]) if m.get("mileage_km") else None,
+            "fuel_type": m.get("fuel_type") or "",
+            "transmission": m.get("transmission") or "",
+            "body_type": m.get("body_type") or "",
+            "power_hp": m.get("power_hp"),
+            "country": m.get("country") or "",
+            "country_label": COUNTRY_LABELS.get(m.get("country", ""), m.get("country", "")),
+            "provider": m.get("provider") or "",
+            "provider_label": PROVIDER_LABELS.get(m.get("provider", ""), m.get("provider", "")),
+            "steering_side": m.get("steering_side") or "",
+            "condition": m.get("condition") or "",
+            "url": m.get("source_url") or "",
+        })
 
-    return f"Found {len(rows)} listings:\n\n" + "\n".join(results)
+    label = " ".join(filter(None, [args.make, args.model]))
+    artifact = {
+        "kind": "listings",
+        "title": f"{label or 'Car'} Listings",
+        "subtitle": f"{len(listings)} result(s)",
+        "listings": listings,
+    }
+    text = f"Found {len(rows)} listings:\n\n" + "\n".join(lines)
+    return f"__ARTIFACT__{json.dumps(artifact)}\n\n{text}"
 
 
 class CarStatsArgs(BaseModel):

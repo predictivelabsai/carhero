@@ -528,6 +528,56 @@
   font-weight: 700;
 }
 
+/* -- Listing cards -- */
+.listing-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 10px;
+  background: #FAFAFA;
+}
+.listing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.listing-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.listing-price {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink);
+  font-family: 'Courier New', monospace;
+}
+.listing-specs {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+.listing-extra {
+  font-size: 11px;
+  color: var(--ink-dim);
+  margin-bottom: 4px;
+}
+.listing-source {
+  font-size: 11px;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+.listing-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.listing-link:hover {
+  text-decoration: underline;
+}
+
 /* -- Mobile -- */
 @media (max-width: 768px) {
   .left-pane {

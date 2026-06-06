@@ -159,6 +159,26 @@ def _init_car_tables():
             snapshot_date DATE NOT NULL,
             created_at TIMESTAMPTZ DEFAULT NOW()
         )""",
+        f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.deals (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            make VARCHAR(100) NOT NULL,
+            model VARCHAR(100) NOT NULL,
+            cheapest_listing_id INTEGER REFERENCES {SCHEMA}.car_listings(id),
+            priciest_listing_id INTEGER REFERENCES {SCHEMA}.car_listings(id),
+            cheapest_price_eur NUMERIC(12,2),
+            priciest_price_eur NUMERIC(12,2),
+            savings_eur NUMERIC(12,2),
+            savings_pct NUMERIC(5,1),
+            cheapest_country VARCHAR(5),
+            cheapest_provider VARCHAR(50),
+            priciest_country VARCHAR(5),
+            priciest_provider VARCHAR(50),
+            listing_count INTEGER DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(make, model)
+        )""",
     ]
     indexes = [
         f"CREATE INDEX IF NOT EXISTS idx_car_listings_make ON {SCHEMA}.car_listings(make)",
@@ -169,6 +189,8 @@ def _init_car_tables():
         f"CREATE INDEX IF NOT EXISTS idx_car_listings_country ON {SCHEMA}.car_listings(country)",
         f"CREATE INDEX IF NOT EXISTS idx_price_history_listing ON {SCHEMA}.price_history(listing_id)",
         f"CREATE INDEX IF NOT EXISTS idx_market_snapshots_date ON {SCHEMA}.market_snapshots(snapshot_date)",
+        f"CREATE INDEX IF NOT EXISTS idx_deals_make_model ON {SCHEMA}.deals(make, model)",
+        f"CREATE INDEX IF NOT EXISTS idx_deals_status ON {SCHEMA}.deals(status)",
     ]
     with engine.connect() as conn:
         for stmt in ddl:

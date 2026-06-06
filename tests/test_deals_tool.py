@@ -64,6 +64,13 @@ class TestDealArtifactPayload:
         assert "cheapest" in deal
         assert "priciest" in deal
 
+    def test_deal_has_uuid(self, artifact_payload):
+        import uuid
+        deal = artifact_payload["deals"][0]
+        assert "deal_id" in deal
+        assert deal["deal_id"] is not None
+        uuid.UUID(deal["deal_id"])
+
     def test_deal_listing_has_url(self, artifact_payload):
         deal = artifact_payload["deals"][0]
         assert "url" in deal["cheapest"]

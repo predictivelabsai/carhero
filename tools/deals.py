@@ -11,13 +11,20 @@ from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
 
-COUNTRY_LABELS = {"GB": "UK", "DE": "Germany", "EU": "Other EU"}
+COUNTRY_LABELS = {
+    "GB": "UK", "DE": "Germany", "EU": "Other EU",
+    "EE": "Estonia", "LT": "Lithuania", "LV": "Latvia", "SE": "Sweden",
+}
 PROVIDER_LABELS = {
     "autotrader": "AutoTrader UK",
     "mobile_de": "mobile.de",
     "autoscout24": "AutoScout24",
     "autohero": "Autohero",
     "theparking": "TheParking",
+    "auto24_ee": "Auto24.ee",
+    "auto24_lt": "Auto24.lt",
+    "auto24_lv": "Auto24.lv",
+    "blocket": "Blocket.se",
 }
 
 
@@ -95,7 +102,47 @@ def _find_deals(**kw) -> str:
             savings_eur = float(priciest["price_eur"]) - float(cheapest["price_eur"])
             savings_pct = float(row["spread_pct"])
 
+            deal_row = db.execute(text("""
+                INSERT INTO carhero.deals
+                    (make, model, cheapest_listing_id, priciest_listing_id,
+                     cheapest_price_eur, priciest_price_eur, savings_eur, savings_pct,
+                     cheapest_country, cheapest_provider, priciest_country, priciest_provider,
+                     listing_count, status, updated_at)
+                VALUES
+                    (:make, :model, :cl, :pl,
+                     :cp_eur, :pp_eur, :sav, :spct,
+                     :cc, :cprov, :pc, :pprov,
+                     :cnt, 'active', NOW())
+                ON CONFLICT (make, model) DO UPDATE SET
+                    cheapest_listing_id  = EXCLUDED.cheapest_listing_id,
+                    priciest_listing_id  = EXCLUDED.priciest_listing_id,
+                    cheapest_price_eur   = EXCLUDED.cheapest_price_eur,
+                    priciest_price_eur   = EXCLUDED.priciest_price_eur,
+                    savings_eur          = EXCLUDED.savings_eur,
+                    savings_pct          = EXCLUDED.savings_pct,
+                    cheapest_country     = EXCLUDED.cheapest_country,
+                    cheapest_provider    = EXCLUDED.cheapest_provider,
+                    priciest_country     = EXCLUDED.priciest_country,
+                    priciest_provider    = EXCLUDED.priciest_provider,
+                    listing_count        = EXCLUDED.listing_count,
+                    status               = 'active',
+                    updated_at           = NOW()
+                RETURNING id
+            """), {
+                "make": row["make"], "model": row["model"],
+                "cl": cheapest["id"], "pl": priciest["id"],
+                "cp_eur": float(cheapest["price_eur"]),
+                "pp_eur": float(priciest["price_eur"]),
+                "sav": savings_eur, "spct": savings_pct,
+                "cc": cheapest["country"], "cprov": cheapest["provider"],
+                "pc": priciest["country"], "pprov": priciest["provider"],
+                "cnt": int(row["listing_count"]),
+            })
+            deal = deal_row.first()
+            deal_id = str(deal.id) if deal else None
+
             deals.append({
+                "deal_id": deal_id,
                 "make": row["make"],
                 "model": row["model"],
                 "listing_count": int(row["listing_count"]),
@@ -129,6 +176,7 @@ def _find_deals(**kw) -> str:
                 },
             })
 
+        db.commit()
     finally:
         db.close()
 

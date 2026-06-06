@@ -196,11 +196,28 @@ def dismiss_cookies(page):
     except Exception:
         pass
 
+    # Blocket.se: SP Consent in iframe
+    try:
+        iframe_el = page.frame_locator("iframe[title*='Cookie'], iframe[id*='sp_message']")
+        btn = iframe_el.locator("button:has-text('Godkänn alla')")
+        if btn.count() > 0:
+            btn.first.click()
+            time.sleep(0.5)
+            return True
+    except Exception:
+        pass
+
     selectors = [
         # mobile.de
         "button:has-text('Einverstanden')",
         # AutoScout24
         '[data-testid="as24-cmp-accept-all-button"]',
+        # auto24 Baltic
+        "button:has-text('Nõustun')",
+        "button:has-text('Sutinku')",
+        "button:has-text('Piekrītu')",
+        # Blocket.se (non-iframe fallback)
+        "button:has-text('Godkänn alla')",
         # Generic
         "button:has-text('Accept All')",
         "button:has-text('Accept all')",
@@ -360,8 +377,8 @@ def listing_to_db_row(listing: dict) -> dict:
         "owners_count": _safe_int(listing.get("owners_count")),
         "accident_free": listing.get("accident_free"),
         "service_history": listing.get("service_history"),
-        "features": listing.get("features"),
-        "equipment_packages": listing.get("equipment_packages"),
+        "features": json.dumps(listing["features"]) if listing.get("features") else None,
+        "equipment_packages": json.dumps(listing["equipment_packages"]) if listing.get("equipment_packages") else None,
         "source_url": (listing.get("source_url") or "")[:500] or None,
         "provider": listing.get("provider", "unknown"),
         "country": listing.get("country"),
@@ -369,7 +386,7 @@ def listing_to_db_row(listing: dict) -> dict:
         "seller_type": _clean(listing.get("seller_type"), 20),
         "seller_name": _clean(listing.get("seller_name"), 200),
         "listed_date": listing.get("listed_date"),
-        "image_urls": listing.get("image_urls"),
+        "image_urls": json.dumps(listing["image_urls"]) if listing.get("image_urls") else None,
         "image_count": len(listing.get("image_urls") or []),
         "status": listing.get("status", "active"),
     }

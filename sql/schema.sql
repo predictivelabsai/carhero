@@ -128,6 +128,29 @@ CREATE TABLE IF NOT EXISTS carhero.market_snapshots (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── Deals table ───────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS carhero.deals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    make VARCHAR(100) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    cheapest_listing_id INTEGER REFERENCES carhero.car_listings(id),
+    priciest_listing_id INTEGER REFERENCES carhero.car_listings(id),
+    cheapest_price_eur NUMERIC(12,2),
+    priciest_price_eur NUMERIC(12,2),
+    savings_eur NUMERIC(12,2),
+    savings_pct NUMERIC(5,1),
+    cheapest_country VARCHAR(5),
+    cheapest_provider VARCHAR(50),
+    priciest_country VARCHAR(5),
+    priciest_provider VARCHAR(50),
+    listing_count INTEGER DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(make, model)
+);
+
 -- ─── Indexes ────────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_car_listings_make ON carhero.car_listings(make);
@@ -142,3 +165,5 @@ CREATE INDEX IF NOT EXISTS idx_price_history_listing ON carhero.price_history(li
 CREATE INDEX IF NOT EXISTS idx_market_snapshots_date ON carhero.market_snapshots(snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON carhero.chat_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON carhero.chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_deals_make_model ON carhero.deals(make, model);
+CREATE INDEX IF NOT EXISTS idx_deals_status ON carhero.deals(status);

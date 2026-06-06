@@ -364,6 +364,26 @@
                 </div>`;
             }).join("");
         }
+        if (p.kind === "listings" && Array.isArray(p.listings)) {
+            if (!p.listings.length) return '<p style="color:var(--ink-muted)">No listings found.</p>';
+            const fmtPrice = n => n ? "EUR " + Number(n).toLocaleString() : "N/A";
+            const fmtKm = n => n ? Number(n).toLocaleString() + " km" : "";
+            return p.listings.map(l => {
+                const specs = [l.variant, l.year, fmtKm(l.mileage_km), l.fuel_type, l.transmission].filter(Boolean).join(" · ");
+                const extra = [l.power_hp ? l.power_hp + "hp" : "", l.body_type, l.steering_side === "RHD" ? "RHD" : ""].filter(Boolean).join(" · ");
+                return `
+                <div class="listing-card">
+                    <div class="listing-header">
+                        <span class="listing-title">${l.make} ${l.model}</span>
+                        <span class="listing-price">${fmtPrice(l.price_eur)}</span>
+                    </div>
+                    <div class="listing-specs">${specs}</div>
+                    ${extra ? `<div class="listing-extra">${extra}</div>` : ""}
+                    <div class="listing-source">${l.provider_label} · ${l.country_label}</div>
+                    ${l.url ? `<a href="${l.url}" target="_blank" class="listing-link">View listing →</a>` : ""}
+                </div>`;
+            }).join("");
+        }
         if (p.kind === "table" && Array.isArray(p.rows)) {
             if (!p.rows.length) return '<p><em>No rows.</em></p>';
             const cols = p.columns || Object.keys(p.rows[0]);
@@ -458,12 +478,27 @@
     window.renderMarkdownLite = renderMarkdownLite;
     window.enhanceTables = enhanceTables;
 
-    // Auto-send deal query from email deep-link (?deal=BMW+X5)
-    const dealParam = new URLSearchParams(window.location.search).get("deal");
-    if (dealParam && !getSidFromURL()) {
-        setTimeout(() => {
-            fillChat("search: show me price arbitrage deals for " + dealParam);
-            sendMessage(null);
-        }, 300);
+    // Auto-send deal query from email deep-link (?deal_id=<uuid> or ?deal=BMW+X5)
+    function autoDealSend(query) {
+        const ta = $("#chat-input");
+        if (!ta) return;
+        ta.value = query;
+        if (typeof autoResize === "function") autoResize(ta);
+        sendMessage(null);
+    }
+    if (!getSidFromURL()) {
+        const params = new URLSearchParams(window.location.search);
+        const dealId = params.get("deal_id");
+        const dealName = params.get("deal");
+        if (dealId) {
+            fetch("/api/deal/" + encodeURIComponent(dealId))
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (d) autoDealSend("search: show me price arbitrage deals for " + d.make + " " + d.model);
+                })
+                .catch(() => {});
+        } else if (dealName) {
+            setTimeout(() => autoDealSend("search: show me price arbitrage deals for " + dealName), 300);
+        }
     }
 })();
