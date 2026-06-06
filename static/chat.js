@@ -371,13 +371,16 @@
             return p.listings.map(l => {
                 const specs = [l.variant, l.year, fmtKm(l.mileage_km), l.fuel_type, l.transmission].filter(Boolean).join(" · ");
                 const extra = [l.power_hp ? l.power_hp + "hp" : "", l.body_type, l.steering_side === "RHD" ? "RHD" : ""].filter(Boolean).join(" · ");
+                const scoreBadge = l.investment_score ? `<span class="listing-score tier-${l.tier||3}">${l.investment_score}</span>` : "";
+                const favBtn = l.id ? `<button class="fav-btn" onclick="toggleFavorite(${l.id},this)" title="Save to favorites">&#9825;</button>` : "";
                 return `
                 <div class="listing-card">
                     <div class="listing-header">
                         <span class="listing-title">${l.make} ${l.model}</span>
-                        <span class="listing-price">${fmtPrice(l.price_eur)}</span>
+                        <span style="display:flex;align-items:center;gap:6px;">${scoreBadge}<span class="listing-price">${fmtPrice(l.price_eur)}</span>${favBtn}</span>
                     </div>
                     <div class="listing-specs">${specs}</div>
+                    ${l.strength_summary ? `<div class="listing-strength">${l.strength_summary}</div>` : ""}
                     ${extra ? `<div class="listing-extra">${extra}</div>` : ""}
                     <div class="listing-source">${l.provider_label} · ${l.country_label}</div>
                     ${l.url ? `<a href="${l.url}" target="_blank" class="listing-link">View listing →</a>` : ""}
@@ -502,3 +505,121 @@
         }
     }
 })();
+
+/* -- Auth functions (global, called from onclick handlers) -- */
+
+function switchAuthTab(tab) {
+    document.getElementById('auth-form-login').style.display = tab === 'login' ? '' : 'none';
+    document.getElementById('auth-form-register').style.display = tab === 'register' ? '' : 'none';
+    document.getElementById('auth-form-forgot').style.display = tab === 'forgot' ? '' : 'none';
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    const tabEl = document.getElementById('auth-tab-' + tab);
+    if (tabEl) tabEl.classList.add('active');
+}
+
+function showForgotPassword(e) {
+    e && e.preventDefault();
+    switchAuthTab('forgot');
+}
+
+function showSignIn() {
+    document.getElementById('signin-overlay').classList.add('visible');
+    switchAuthTab('login');
+}
+
+async function doLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    if (!email || !password) { errEl.textContent = 'Email and password required'; return; }
+
+    const resp = await fetch('/auth/login', {
+        method: 'POST',
+        body: new URLSearchParams({ email, password }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+        location.reload();
+    } else if (data.error === 'no_password') {
+        errEl.innerHTML = 'No password set. <a href="#" onclick="showSetPassword(\'' + email + '\');return false" style="color:#000;font-weight:600;">Set one now</a>';
+    } else {
+        errEl.textContent = data.error || 'Login failed';
+    }
+}
+
+async function doRegister() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const errEl = document.getElementById('reg-error');
+    const okEl = document.getElementById('reg-success');
+    errEl.textContent = ''; okEl.textContent = '';
+    if (!email || !password) { errEl.textContent = 'Email and password required'; return; }
+
+    const resp = await fetch('/auth/register', {
+        method: 'POST',
+        body: new URLSearchParams({ email, password, name }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+        okEl.textContent = data.message || 'Check your email to verify';
+    } else {
+        errEl.textContent = data.error || 'Registration failed';
+    }
+}
+
+async function doForgot() {
+    const email = document.getElementById('forgot-email').value.trim();
+    const msgEl = document.getElementById('forgot-msg');
+    msgEl.textContent = '';
+    if (!email) { msgEl.textContent = 'Enter your email'; msgEl.style.color = '#DC2626'; return; }
+
+    const resp = await fetch('/auth/forgot', {
+        method: 'POST',
+        body: new URLSearchParams({ email }),
+    });
+    const data = await resp.json();
+    msgEl.style.color = '#16A34A';
+    msgEl.textContent = data.message || 'Reset link sent if account exists';
+}
+
+function showSetPassword(email) {
+    const form = document.getElementById('auth-form-login');
+    form.innerHTML = '<p style="font-size:13px;color:#4B5563;margin-bottom:12px;">Set a password for <strong>' + email + '</strong></p>'
+        + '<input type="password" id="set-pw-input" placeholder="New password (min 6 chars)" style="width:100%;padding:8px 12px;border:1px solid #E5E7EB;border-radius:6px;font-size:14px;margin-bottom:12px;">'
+        + '<div id="set-pw-error" style="color:#DC2626;font-size:12px;margin-bottom:8px;"></div>'
+        + '<button onclick="doSetPassword(\'' + email + '\')" style="padding:8px 16px;background:#000;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Set Password</button>';
+}
+
+async function doSetPassword(email) {
+    const password = document.getElementById('set-pw-input').value;
+    const errEl = document.getElementById('set-pw-error');
+    if (!password || password.length < 6) { errEl.textContent = 'Min 6 characters'; return; }
+
+    const resp = await fetch('/auth/set-password', {
+        method: 'POST',
+        body: new URLSearchParams({ email, password }),
+    });
+    const data = await resp.json();
+    if (data.ok) location.reload();
+    else errEl.textContent = data.error || 'Failed';
+}
+
+function signOut() {
+    fetch('/auth/logout', { method: 'POST' }).then(() => location.reload());
+}
+
+async function toggleFavorite(listingId, btn) {
+    const resp = await fetch('/api/favorites', {
+        method: 'POST',
+        body: new URLSearchParams({ listing_id: listingId }),
+    });
+    if (resp.ok) {
+        btn.innerHTML = '&#9829;';
+        btn.style.color = '#DC2626';
+    }
+}
+
+/* Legacy compat */
+function doSignIn() { doLogin(); }

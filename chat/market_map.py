@@ -1,9 +1,11 @@
-"""Market Map — interactive treemap + price trends + geographic comparison with filters.
+"""Market Map — interactive treemap + price trends + geographic comparison + value map + price index.
 
-GET /app/market-map              → full-page Market Map with filters
+GET /app/market-map              → full-page Market Map with tabs (Overview, Value Map, Price Index)
 GET /api/market-map/treemap      → Plotly JSON (supports ?country=&make=&fuel_type=)
 GET /api/market-map/trends       → Plotly JSON (supports ?country=&make=&fuel_type=)
 GET /api/market-map/geo          → Plotly JSON (supports ?make=&model=)
+GET /api/market-map/value-map    → Plotly JSON scatter (score vs price, quadrants)
+GET /api/market-map/price-index  → Plotly JSON line (index over time/year)
 GET /api/market-map/filters      → available filter values
 """
 
@@ -12,8 +14,10 @@ from __future__ import annotations
 import json
 import logging
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from fasthtml.common import (
     Html, Head, Body, Script, NotStr,
     Div, Span, H2, H3, P, A, Button, Select, Option, Label, Input,
@@ -239,6 +243,138 @@ def _build_geo_fig(rows):
     return fig
 
 
+def _fetch_value_map_data(params: dict):
+    from db import SessionLocal
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        where, bind = _build_where(params)
+        sql = text(f"""
+            WITH model_agg AS (
+                SELECT cl.make, cl.model,
+                       COUNT(*) AS listing_count,
+                       ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cl.price_eur)::numeric, 0) AS median_price,
+                       ROUND(AVG(s.score)::numeric, 1) AS avg_score
+                FROM carhero.car_listings cl
+                JOIN carhero.investment_scores s ON s.listing_id = cl.id
+                    AND s.snapshot_date = (SELECT MAX(snapshot_date) FROM carhero.investment_scores)
+                {where.replace('WHERE', 'WHERE', 1) if where else ''}
+                GROUP BY cl.make, cl.model
+                HAVING COUNT(*) >= 2 AND AVG(s.score) IS NOT NULL
+            )
+            SELECT * FROM model_agg ORDER BY avg_score DESC LIMIT 80
+        """)
+        return [dict(r._mapping) for r in db.execute(sql, bind)]
+    finally:
+        db.close()
+
+
+def _build_value_map_fig(rows):
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    df["median_price"] = pd.to_numeric(df["median_price"], errors="coerce")
+    df["avg_score"] = pd.to_numeric(df["avg_score"], errors="coerce")
+    df["listing_count"] = df["listing_count"].astype(int)
+
+    price_mid = df["median_price"].median()
+    score_mid = df["avg_score"].median()
+
+    fig = go.Figure()
+    for make in sorted(df["make"].unique()):
+        sub = df[df["make"] == make]
+        fig.add_trace(go.Scatter(
+            x=sub["median_price"], y=sub["avg_score"],
+            mode="markers",
+            marker=dict(size=np.clip(np.sqrt(sub["listing_count"]) * 4, 8, 50)),
+            name=make,
+            text=sub["make"] + " " + sub["model"],
+            hovertemplate="<b>%{text}</b><br>Price: EUR %{x:,.0f}<br>Score: %{y:.1f}<extra></extra>",
+        ))
+
+    fig.add_hline(y=score_mid, line_dash="dot", line_color="gray", opacity=0.4)
+    fig.add_vline(x=price_mid, line_dash="dot", line_color="gray", opacity=0.4)
+
+    fig.add_annotation(x=0.03, y=0.97, xref="paper", yref="paper",
+                       text="BARGAINS", showarrow=False, font=dict(size=13, color="#16A34A"))
+    fig.add_annotation(x=0.97, y=0.97, xref="paper", yref="paper",
+                       text="BLUE CHIPS", showarrow=False, font=dict(size=13, color="#2563EB"))
+    fig.add_annotation(x=0.03, y=0.03, xref="paper", yref="paper",
+                       text="SLEEPERS", showarrow=False, font=dict(size=13, color="#D97706"))
+    fig.add_annotation(x=0.97, y=0.03, xref="paper", yref="paper",
+                       text="OVERPRICED", showarrow=False, font=dict(size=13, color="#DC2626"))
+
+    fig.update_layout(
+        **CHART_LAYOUT,
+        title="Value Map: Investment Score vs Median Price",
+        xaxis_title="Median Price (EUR)",
+        yaxis_title="Investment Score (0-100)",
+    )
+    return fig
+
+
+def _fetch_price_index_data(params: dict):
+    from db import SessionLocal
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        base_year = int(params.get("base_year", "2015") or "2015")
+        make_filter = params.get("make", "").strip()
+
+        conditions = ["status = 'active'", "price_eur > 0", "year IS NOT NULL", "year >= 2005"]
+        bind = {}
+        if make_filter and make_filter != "ALL":
+            conditions.append("make = :make")
+            bind["make"] = make_filter
+        where = " AND ".join(conditions)
+
+        sql = text(f"""
+            WITH by_year AS (
+                SELECT year, make,
+                       AVG(price_eur) AS avg_price,
+                       COUNT(*) AS cnt
+                FROM carhero.car_listings
+                WHERE {where}
+                GROUP BY year, make
+                HAVING COUNT(*) >= 2
+            ),
+            base AS (
+                SELECT make, AVG(avg_price) AS base_price
+                FROM by_year WHERE year = :base_year
+                GROUP BY make
+            )
+            SELECT by.year, by.make,
+                   ROUND((by.avg_price / NULLIF(b.base_price, 0) * 100)::numeric, 1) AS index_value,
+                   by.cnt AS listings
+            FROM by_year by
+            JOIN base b ON b.make = by.make
+            ORDER BY by.year, by.make
+        """)
+        bind["base_year"] = base_year
+        rows = [dict(r._mapping) for r in db.execute(sql, bind)]
+        return rows, base_year
+    finally:
+        db.close()
+
+
+def _build_price_index_fig(rows, base_year):
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    df["index_value"] = pd.to_numeric(df["index_value"], errors="coerce")
+
+    fig = px.line(
+        df, x="year", y="index_value", color="make",
+        title=f"Price Index (base year {base_year} = 100)",
+        markers=True,
+    )
+    fig.add_hline(y=100, line_dash="dash", line_color="gray", opacity=0.5,
+                  annotation_text=f"Base ({base_year})")
+    fig.update_layout(**CHART_LAYOUT)
+    fig.update_layout(xaxis_title="Model Year", yaxis_title="Price Index")
+    return fig
+
+
 COUNTRY_NAMES = {"GB": "United Kingdom", "DE": "Germany", "EU": "Other EU"}
 
 
@@ -267,6 +403,24 @@ def register_market_map_routes(rt):
         params = dict(request.query_params)
         rows = _fetch_geo_data(params)
         fig = _build_geo_fig(rows)
+        if not fig:
+            return JSONResponse({"error": "No data"})
+        return JSONResponse(json.loads(fig.to_json()))
+
+    @rt("/api/market-map/value-map")
+    def value_map_json(request: Request):
+        params = dict(request.query_params)
+        rows = _fetch_value_map_data(params)
+        fig = _build_value_map_fig(rows)
+        if not fig:
+            return JSONResponse({"error": "No data"})
+        return JSONResponse(json.loads(fig.to_json()))
+
+    @rt("/api/market-map/price-index")
+    def price_index_json(request: Request):
+        params = dict(request.query_params)
+        rows, base_year = _fetch_price_index_data(params)
+        fig = _build_price_index_fig(rows, base_year)
         if not fig:
             return JSONResponse({"error": "No data"})
         return JSONResponse(json.loads(fig.to_json()))
@@ -317,13 +471,14 @@ def register_market_map_routes(rt):
                     cls="chat-header",
                 ),
                 Div(
+                    # Tab navigation
                     Div(
-                        H2("Market Map", cls="text-xl font-display font-bold mb-1"),
-                        P("Interactive market overview. Larger blocks = more listings. Color = price spread across countries (red = big arbitrage opportunity).",
-                          cls="text-sm text-gray-500 mb-4"),
-                        cls="mb-2",
+                        Button("Overview", id="tab-overview", cls="mm-tab active", onclick="switchTab('overview')"),
+                        Button("Value Map", id="tab-valuemap", cls="mm-tab", onclick="switchTab('valuemap')"),
+                        Button("Price Index", id="tab-index", cls="mm-tab", onclick="switchTab('index')"),
+                        cls="flex gap-1 mb-4 border-b border-gray-200 px-6 pt-4",
                     ),
-                    # Filters
+                    # Filters (shared across tabs)
                     Div(
                         Div(
                             Label("Country", cls="text-xs text-gray-400 block mb-1"),
@@ -355,29 +510,53 @@ def register_market_map_routes(rt):
                         ),
                         Button("Apply", onclick="applyFilters()",
                                cls="self-end px-4 py-1.5 text-sm bg-black text-white rounded cursor-pointer border-none hover:bg-gray-800"),
-                        cls="flex flex-wrap items-end gap-4 mb-6 p-3 bg-gray-50 rounded-lg border border-gray-100",
+                        cls="flex flex-wrap items-end gap-4 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100 mx-6",
                     ),
-                    # Treemap
-                    Div(id="treemap-chart", style="width:100%;min-height:500px;"),
-                    # Price Trends
+                    # Tab: Overview (existing content)
                     Div(
-                        H3("Price by Model Year", cls="text-lg font-display font-bold mt-8 mb-1"),
-                        P("Average asking price by model year and brand. Shows depreciation curves.",
+                        H2("Market Overview", cls="text-xl font-display font-bold mb-1"),
+                        P("Larger blocks = more listings. Color = price spread across countries.",
                           cls="text-sm text-gray-500 mb-4"),
-                    ),
-                    Div(id="trend-chart", style="width:100%;min-height:400px;"),
-                    # Geographic Comparison
-                    Div(
+                        Div(id="treemap-chart", style="width:100%;min-height:500px;"),
+                        H3("Price by Model Year", cls="text-lg font-display font-bold mt-8 mb-1"),
+                        P("Average asking price by model year and brand.",
+                          cls="text-sm text-gray-500 mb-4"),
+                        Div(id="trend-chart", style="width:100%;min-height:400px;"),
                         H3("Geographic Price Comparison", cls="text-lg font-display font-bold mt-8 mb-1"),
                         P("Average price for the same brand/model across countries and providers.",
                           cls="text-sm text-gray-500 mb-4"),
+                        Div(id="geo-chart", style="width:100%;min-height:400px;"),
+                        id="tab-content-overview",
+                        cls="px-6 pb-4",
                     ),
-                    Div(id="geo-chart", style="width:100%;min-height:400px;"),
-                    cls="px-6 py-4 overflow-y-auto flex-1",
+                    # Tab: Value Map
+                    Div(
+                        H2("Value Map", cls="text-xl font-display font-bold mb-1"),
+                        P("Investment Score vs Median Price per model. Top-left = bargains, top-right = blue chips.",
+                          cls="text-sm text-gray-500 mb-4"),
+                        Div(id="value-map-chart", style="width:100%;min-height:550px;"),
+                        id="tab-content-valuemap",
+                        cls="px-6 pb-4",
+                        style="display:none",
+                    ),
+                    # Tab: Price Index
+                    Div(
+                        H2("Price Index", cls="text-xl font-display font-bold mb-1"),
+                        P("Price index normalized to base year = 100. Shows which brands gain or lose value by model year.",
+                          cls="text-sm text-gray-500 mb-4"),
+                        Div(id="price-index-chart", style="width:100%;min-height:450px;"),
+                        id="tab-content-index",
+                        cls="px-6 pb-4",
+                        style="display:none",
+                    ),
+                    cls="overflow-y-auto flex-1",
                 ),
                 cls="center-pane",
             ),
             Script(NotStr("""
+                let currentTab = 'overview';
+                const noData = '<p style="color:#888;padding:2rem;text-align:center">No data for these filters.</p>';
+
                 function getFilterParams() {
                     const country = document.getElementById('filter-country').value;
                     const make = document.getElementById('filter-make').value;
@@ -391,24 +570,48 @@ def register_market_map_routes(rt):
                     return params.toString();
                 }
 
+                function switchTab(tab) {
+                    document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.style.display = 'none');
+                    document.querySelectorAll('.mm-tab').forEach(el => el.classList.remove('active'));
+                    document.getElementById('tab-content-' + tab).style.display = 'block';
+                    document.getElementById('tab-' + tab.replace('valuemap','valuemap').replace('index','index')).classList.add('active');
+                    currentTab = tab;
+                    applyFilters();
+                }
+
+                async function loadOverview(qs) {
+                    const [t, r, g] = await Promise.all([
+                        fetch('/api/market-map/treemap?' + qs).then(r => r.json()),
+                        fetch('/api/market-map/trends?' + qs).then(r => r.json()),
+                        fetch('/api/market-map/geo?' + qs).then(r => r.json()),
+                    ]);
+                    if (t.data) Plotly.newPlot('treemap-chart', t.data, t.layout, {responsive: true});
+                    else document.getElementById('treemap-chart').innerHTML = noData;
+                    if (r.data) Plotly.newPlot('trend-chart', r.data, r.layout, {responsive: true});
+                    else document.getElementById('trend-chart').innerHTML = noData;
+                    if (g.data) Plotly.newPlot('geo-chart', g.data, g.layout, {responsive: true});
+                    else document.getElementById('geo-chart').innerHTML = noData;
+                }
+
+                async function loadValueMap(qs) {
+                    const r = await fetch('/api/market-map/value-map?' + qs);
+                    const data = await r.json();
+                    if (data.data) Plotly.newPlot('value-map-chart', data.data, data.layout, {responsive: true});
+                    else document.getElementById('value-map-chart').innerHTML = noData;
+                }
+
+                async function loadPriceIndex(qs) {
+                    const r = await fetch('/api/market-map/price-index?' + qs);
+                    const data = await r.json();
+                    if (data.data) Plotly.newPlot('price-index-chart', data.data, data.layout, {responsive: true});
+                    else document.getElementById('price-index-chart').innerHTML = noData;
+                }
+
                 async function applyFilters() {
                     const qs = getFilterParams();
-                    const noData = '<p style="color:#888;padding:2rem;text-align:center">No data for these filters. Try scraping some listings first.</p>';
-
-                    const t = await fetch('/api/market-map/treemap?' + qs);
-                    const tData = await t.json();
-                    if (tData.data) Plotly.newPlot('treemap-chart', tData.data, tData.layout, {responsive: true});
-                    else document.getElementById('treemap-chart').innerHTML = noData;
-
-                    const r = await fetch('/api/market-map/trends?' + qs);
-                    const rData = await r.json();
-                    if (rData.data) Plotly.newPlot('trend-chart', rData.data, rData.layout, {responsive: true});
-                    else document.getElementById('trend-chart').innerHTML = noData;
-
-                    const g = await fetch('/api/market-map/geo?' + qs);
-                    const gData = await g.json();
-                    if (gData.data) Plotly.newPlot('geo-chart', gData.data, gData.layout, {responsive: true});
-                    else document.getElementById('geo-chart').innerHTML = noData;
+                    if (currentTab === 'overview') await loadOverview(qs);
+                    else if (currentTab === 'valuemap') await loadValueMap(qs);
+                    else if (currentTab === 'index') await loadPriceIndex(qs);
                 }
 
                 applyFilters();

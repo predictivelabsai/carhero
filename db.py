@@ -49,6 +49,12 @@ def _init_chat_tables():
         f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.chat_users (
             id SERIAL PRIMARY KEY,
             email VARCHAR(255) UNIQUE NOT NULL,
+            password_hash VARCHAR(255),
+            name VARCHAR(200),
+            is_verified BOOLEAN DEFAULT FALSE,
+            verify_token VARCHAR(64),
+            reset_token VARCHAR(64),
+            reset_token_expires TIMESTAMPTZ,
             created_at TIMESTAMPTZ DEFAULT NOW()
         )""",
         f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.chat_sessions (
@@ -70,9 +76,22 @@ def _init_chat_tables():
             created_at TIMESTAMPTZ DEFAULT NOW()
         )""",
     ]
+    alters = [
+        f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
+        f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS name VARCHAR(200)",
+        f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE",
+        f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS verify_token VARCHAR(64)",
+        f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(64)",
+        f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ",
+    ]
     with engine.connect() as conn:
         for stmt in ddl:
             conn.execute(text(stmt))
+        for stmt in alters:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                pass
         conn.commit()
 
 
@@ -179,6 +198,58 @@ def _init_car_tables():
             updated_at TIMESTAMPTZ DEFAULT NOW(),
             UNIQUE(make, model)
         )""",
+        f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.investment_scores (
+            id SERIAL PRIMARY KEY,
+            listing_id INTEGER NOT NULL REFERENCES {SCHEMA}.car_listings(id) ON DELETE CASCADE,
+            score INTEGER NOT NULL CHECK (score BETWEEN 0 AND 100),
+            tier INTEGER NOT NULL CHECK (tier BETWEEN 1 AND 3),
+            percentile NUMERIC(4,1),
+            price_score INTEGER,
+            mileage_score INTEGER,
+            depreciation_score INTEGER,
+            scarcity_score INTEGER,
+            config_score INTEGER,
+            strength_summary TEXT,
+            computed_at TIMESTAMPTZ DEFAULT NOW(),
+            snapshot_date DATE NOT NULL,
+            UNIQUE(listing_id, snapshot_date)
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.favorites (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES {SCHEMA}.chat_users(id) ON DELETE CASCADE,
+            listing_id INTEGER NOT NULL REFERENCES {SCHEMA}.car_listings(id) ON DELETE CASCADE,
+            price_at_save NUMERIC(12,2),
+            note VARCHAR(500),
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(user_id, listing_id)
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.saved_searches (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES {SCHEMA}.chat_users(id) ON DELETE CASCADE,
+            name VARCHAR(200) NOT NULL,
+            filters JSONB NOT NULL,
+            last_viewed_at TIMESTAMPTZ DEFAULT NOW(),
+            last_count INTEGER DEFAULT 0,
+            notify_email BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.garage_cars (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES {SCHEMA}.chat_users(id) ON DELETE CASCADE,
+            make VARCHAR(100) NOT NULL,
+            model VARCHAR(100) NOT NULL,
+            variant VARCHAR(200),
+            year INTEGER NOT NULL,
+            mileage_km INTEGER,
+            purchase_price_eur NUMERIC(12,2),
+            purchase_date DATE,
+            fuel_type VARCHAR(50),
+            fuel_consumption_l100km NUMERIC(4,1),
+            annual_km INTEGER DEFAULT 15000,
+            insurance_annual_eur NUMERIC(10,2) DEFAULT 1200,
+            maintenance_annual_eur NUMERIC(10,2) DEFAULT 800,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )""",
     ]
     indexes = [
         f"CREATE INDEX IF NOT EXISTS idx_car_listings_make ON {SCHEMA}.car_listings(make)",
@@ -191,6 +262,14 @@ def _init_car_tables():
         f"CREATE INDEX IF NOT EXISTS idx_market_snapshots_date ON {SCHEMA}.market_snapshots(snapshot_date)",
         f"CREATE INDEX IF NOT EXISTS idx_deals_make_model ON {SCHEMA}.deals(make, model)",
         f"CREATE INDEX IF NOT EXISTS idx_deals_status ON {SCHEMA}.deals(status)",
+        f"CREATE INDEX IF NOT EXISTS idx_inv_scores_listing ON {SCHEMA}.investment_scores(listing_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_inv_scores_score ON {SCHEMA}.investment_scores(score DESC)",
+        f"CREATE INDEX IF NOT EXISTS idx_inv_scores_tier ON {SCHEMA}.investment_scores(tier)",
+        f"CREATE INDEX IF NOT EXISTS idx_inv_scores_date ON {SCHEMA}.investment_scores(snapshot_date)",
+        f"CREATE INDEX IF NOT EXISTS idx_favorites_user ON {SCHEMA}.favorites(user_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_favorites_listing ON {SCHEMA}.favorites(listing_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON {SCHEMA}.saved_searches(user_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_garage_cars_user ON {SCHEMA}.garage_cars(user_id)",
     ]
     with engine.connect() as conn:
         for stmt in ddl:

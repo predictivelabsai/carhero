@@ -8,6 +8,12 @@ CREATE SCHEMA IF NOT EXISTS carhero;
 CREATE TABLE IF NOT EXISTS carhero.chat_users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255),
+    name VARCHAR(200),
+    is_verified BOOLEAN DEFAULT FALSE,
+    verify_token VARCHAR(64),
+    reset_token VARCHAR(64),
+    reset_token_expires TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -151,6 +157,66 @@ CREATE TABLE IF NOT EXISTS carhero.deals (
     UNIQUE(make, model)
 );
 
+-- ─── Investment Scores ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS carhero.investment_scores (
+    id SERIAL PRIMARY KEY,
+    listing_id INTEGER NOT NULL REFERENCES carhero.car_listings(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL CHECK (score BETWEEN 0 AND 100),
+    tier INTEGER NOT NULL CHECK (tier BETWEEN 1 AND 3),
+    percentile NUMERIC(4,1),
+    price_score INTEGER,
+    mileage_score INTEGER,
+    depreciation_score INTEGER,
+    scarcity_score INTEGER,
+    config_score INTEGER,
+    strength_summary TEXT,
+    computed_at TIMESTAMPTZ DEFAULT NOW(),
+    snapshot_date DATE NOT NULL,
+    UNIQUE(listing_id, snapshot_date)
+);
+
+-- ─── User features (Favorites, Saved Searches, Garage) ────────────────────
+
+CREATE TABLE IF NOT EXISTS carhero.favorites (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES carhero.chat_users(id) ON DELETE CASCADE,
+    listing_id INTEGER NOT NULL REFERENCES carhero.car_listings(id) ON DELETE CASCADE,
+    price_at_save NUMERIC(12,2),
+    note VARCHAR(500),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, listing_id)
+);
+
+CREATE TABLE IF NOT EXISTS carhero.saved_searches (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES carhero.chat_users(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    filters JSONB NOT NULL,
+    last_viewed_at TIMESTAMPTZ DEFAULT NOW(),
+    last_count INTEGER DEFAULT 0,
+    notify_email BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS carhero.garage_cars (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES carhero.chat_users(id) ON DELETE CASCADE,
+    make VARCHAR(100) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    variant VARCHAR(200),
+    year INTEGER NOT NULL,
+    mileage_km INTEGER,
+    purchase_price_eur NUMERIC(12,2),
+    purchase_date DATE,
+    fuel_type VARCHAR(50),
+    fuel_consumption_l100km NUMERIC(4,1),
+    annual_km INTEGER DEFAULT 15000,
+    insurance_annual_eur NUMERIC(10,2) DEFAULT 1200,
+    maintenance_annual_eur NUMERIC(10,2) DEFAULT 800,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ─── Indexes ────────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_car_listings_make ON carhero.car_listings(make);
@@ -167,3 +233,11 @@ CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON carhero.chat_sessions(user_
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON carhero.chat_messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_deals_make_model ON carhero.deals(make, model);
 CREATE INDEX IF NOT EXISTS idx_deals_status ON carhero.deals(status);
+CREATE INDEX IF NOT EXISTS idx_inv_scores_listing ON carhero.investment_scores(listing_id);
+CREATE INDEX IF NOT EXISTS idx_inv_scores_score ON carhero.investment_scores(score DESC);
+CREATE INDEX IF NOT EXISTS idx_inv_scores_tier ON carhero.investment_scores(tier);
+CREATE INDEX IF NOT EXISTS idx_inv_scores_date ON carhero.investment_scores(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_favorites_user ON carhero.favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_listing ON carhero.favorites(listing_id);
+CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON carhero.saved_searches(user_id);
+CREATE INDEX IF NOT EXISTS idx_garage_cars_user ON carhero.garage_cars(user_id);

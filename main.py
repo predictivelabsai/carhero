@@ -63,6 +63,19 @@ register_market_map_routes(rt)
 from chat.analytics import register_analytics_routes
 register_analytics_routes(rt)
 
+# --- Auth routes ---
+
+from auth.routes import register_auth_routes
+register_auth_routes(rt)
+
+# --- Favorites + Saved Searches + Garage ---
+
+from chat.favorites import register_favorites_routes
+register_favorites_routes(rt)
+
+from chat.garage import register_garage_routes
+register_garage_routes(rt)
+
 
 # --- Initialize DB on startup ---
 
