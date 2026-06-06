@@ -1,9 +1,13 @@
-"""Authentication routes: register, login, verify, forgot password, reset, profile."""
+"""Authentication routes: register, login, verify, forgot password, reset, profile, Google OAuth."""
 
 from __future__ import annotations
 
 import logging
+import os
+import urllib.parse
 from datetime import datetime, timedelta
+
+import requests as http_requests
 
 from fasthtml.common import (
     Html, Head, Body, Div, H2, H3, P, A, Button, Form, Input, Label, Script, NotStr,
@@ -18,6 +22,10 @@ from chat.layout import _head
 from utils.session import get_user_email, set_user_email, get_user_id, set_user_id, clear_user
 
 log = logging.getLogger(__name__)
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv("SERVICE_URL_CARHERO", "https://carhero.chat") + "/auth/google/callback"
 
 SCHEMA = "carhero"
 
@@ -391,3 +399,105 @@ def register_auth_routes(rt):
             db.close()
 
         return JSONResponse({"ok": True})
+
+    # ─── Google OAuth ─────────────────────────────────────────────────────────
+
+    @rt("/auth/google")
+    def auth_google_redirect(sess):
+        if not GOOGLE_CLIENT_ID:
+            return JSONResponse({"error": "Google OAuth not configured"}, status_code=500)
+
+        state = generate_token()
+        sess["oauth_state"] = state
+
+        params = urllib.parse.urlencode({
+            "client_id": GOOGLE_CLIENT_ID,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "access_type": "offline",
+            "state": state,
+            "prompt": "select_account",
+        })
+        return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}", status_code=302)
+
+    @rt("/auth/google/callback")
+    def auth_google_callback(request, sess):
+        from sqlalchemy import text
+
+        code = request.query_params.get("code")
+        state = request.query_params.get("state")
+        error = request.query_params.get("error")
+
+        if error:
+            log.warning(f"Google OAuth error: {error}")
+            return RedirectResponse("/app", status_code=303)
+
+        if not code or state != sess.get("oauth_state"):
+            log.warning("Google OAuth: invalid state or missing code")
+            return RedirectResponse("/app", status_code=303)
+
+        sess.pop("oauth_state", None)
+
+        token_resp = http_requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+        if token_resp.status_code != 200:
+            log.error(f"Google token exchange failed: {token_resp.text}")
+            return RedirectResponse("/app", status_code=303)
+
+        tokens = token_resp.json()
+        access_token = tokens.get("access_token")
+
+        userinfo_resp = http_requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        if userinfo_resp.status_code != 200:
+            log.error(f"Google userinfo failed: {userinfo_resp.text}")
+            return RedirectResponse("/app", status_code=303)
+
+        userinfo = userinfo_resp.json()
+        email = userinfo.get("email", "").lower().strip()
+        name = userinfo.get("name", "")
+
+        if not email:
+            return RedirectResponse("/app", status_code=303)
+
+        db = _get_db()
+        try:
+            row = db.execute(
+                text(f"SELECT id, email, name FROM {SCHEMA}.chat_users WHERE email = :email"),
+                {"email": email},
+            ).fetchone()
+
+            if row:
+                if not row.name and name:
+                    db.execute(text(f"UPDATE {SCHEMA}.chat_users SET name = :name WHERE id = :id"),
+                               {"name": name, "id": row.id})
+                    db.commit()
+                uid = row.id
+            else:
+                result = db.execute(text(f"""
+                    INSERT INTO {SCHEMA}.chat_users (email, name, is_verified)
+                    VALUES (:email, :name, TRUE)
+                    RETURNING id
+                """), {"email": email, "name": name})
+                uid = result.fetchone().id
+                db.commit()
+
+            set_user_email(sess, email)
+            set_user_id(sess, uid)
+        finally:
+            db.close()
+
+        return RedirectResponse("/app", status_code=303)
