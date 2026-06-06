@@ -294,7 +294,8 @@ def register_auth_routes(rt):
 
     # ─── Profile & Preferences ─────────────────────────────────────────────
 
-    MAKES = ['BMW', 'Mercedes-Benz', 'Audi', 'Porsche', 'Jaguar', 'Land Rover', 'Volvo', 'Tesla', 'Lexus']
+    from utils.config import get_featured_brands
+    MAKES = get_featured_brands()
     BODY_TYPES = ['Sedan', 'SUV', 'Estate', 'Coupe', 'Convertible', 'Hatchback', 'MPV', 'Pickup']
     FUEL_TYPES = ['Petrol', 'Diesel', 'Hybrid', 'Electric', 'Plug-in Hybrid']
     TRANSMISSIONS = ['Automatic', 'Manual']

@@ -14,11 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data" / "cars"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Brands we scrape across all providers
-PREMIUM_BRANDS = [
-    "BMW", "Mercedes-Benz", "Audi", "Porsche", "Jaguar",
-    "Land Rover", "Volvo", "Tesla", "Lexus",
-]
+from utils.config import get_all_brands
+
+PREMIUM_BRANDS = get_all_brands()
 
 GBP_TO_EUR = 1.17
 MILES_TO_KM = 1.60934

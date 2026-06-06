@@ -38,8 +38,8 @@ CHART_LAYOUT = dict(
     title=dict(font=dict(size=15)),
 )
 
-PREMIUM_BRANDS = ["BMW", "Mercedes-Benz", "Audi", "Porsche", "Jaguar",
-                  "Land Rover", "Volvo", "Tesla", "Lexus"]
+from utils.config import get_all_brands
+PREMIUM_BRANDS = get_all_brands()
 
 
 def _build_where(params: dict) -> tuple[str, dict]:

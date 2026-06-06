@@ -26,17 +26,8 @@ from scripts.scrapers.base import (
 
 log = logging.getLogger(__name__)
 
-BRAND_IDS = {
-    "BMW": "4",
-    "Mercedes-Benz": "12",
-    "Audi": "2",
-    "Porsche": "140",
-    "Jaguar": "36",
-    "Land Rover": "42",
-    "Volvo": "10",
-    "Tesla": "642",
-    "Lexus": "35",
-}
+from utils.config import get_brand_slugs
+BRAND_IDS = get_brand_slugs("auto24")
 
 SITES = {
     "EE": {"domain": "www.auto24.ee", "country": "EE", "provider": "auto24_ee"},

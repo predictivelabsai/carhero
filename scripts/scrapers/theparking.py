@@ -26,17 +26,8 @@ from scripts.scrapers.base import (
 
 log = logging.getLogger(__name__)
 
-BRAND_SLUGS = {
-    "BMW": "bmw",
-    "Mercedes-Benz": "mercedes-benz",
-    "Audi": "audi",
-    "Porsche": "porsche",
-    "Jaguar": "jaguar",
-    "Land Rover": "land-rover",
-    "Volvo": "volvo",
-    "Tesla": "tesla",
-    "Lexus": "lexus",
-}
+from utils.config import get_brand_slugs
+BRAND_SLUGS = get_brand_slugs("theparking")
 
 BASE_URL = "https://www.theparking.eu"
 MAX_PAGES = 30

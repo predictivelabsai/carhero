@@ -27,17 +27,8 @@ log = logging.getLogger(__name__)
 
 SEK_TO_EUR = 0.087
 
-BRAND_SLUGS = {
-    "BMW": "BMW",
-    "Mercedes-Benz": "Mercedes-Benz",
-    "Audi": "Audi",
-    "Porsche": "Porsche",
-    "Jaguar": "Jaguar",
-    "Land Rover": "Land Rover",
-    "Volvo": "Volvo",
-    "Tesla": "Tesla",
-    "Lexus": "Lexus",
-}
+from utils.config import get_brand_slugs
+BRAND_SLUGS = get_brand_slugs("blocket")
 
 FUEL_MAP = {
     "bensin": "Petrol",

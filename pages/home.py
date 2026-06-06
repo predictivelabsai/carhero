@@ -1,6 +1,7 @@
 from fasthtml.common import *
 from fasthtml.common import NotStr
 from utils.i18n import t, agent_t, get_lang
+from utils.config import get_all_brands
 from chat.components import signin_overlay
 
 
@@ -39,9 +40,9 @@ def home_page(sess=None):
     stats = Div(
         Div(
             _stat('50,000+', t('stat_listings', lang)),
-            _stat('9', t('stat_brands', lang)),
-            _stat('3+', t('stat_countries', lang)),
-            _stat('4', t('stat_sources', lang)),
+            _stat('12', t('stat_brands', lang)),
+            _stat('5+', t('stat_countries', lang)),
+            _stat('8', t('stat_sources', lang)),
             cls='max-w-7xl mx-auto px-5 md:px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-6',
         ),
         cls='border-y border-gray-100 bg-gray-50/60',
@@ -113,7 +114,7 @@ def home_page(sess=None):
             Span('Brands we cover', cls='text-[11px] tracking-[0.18em] uppercase text-gray-400'),
             Div(
                 *[Span(brand, cls='px-4 py-2 rounded-full border border-gray-100 text-sm text-gray-600')
-                  for brand in ['BMW', 'Mercedes-Benz', 'Audi', 'Porsche', 'Jaguar', 'Land Rover', 'Volvo', 'Tesla', 'Lexus']],
+                  for brand in get_all_brands()],
                 cls='mt-4 flex flex-wrap gap-2 justify-center',
             ),
             cls='max-w-7xl mx-auto px-5 md:px-6 text-center',

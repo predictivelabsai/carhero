@@ -26,17 +26,8 @@ from scripts.scrapers.base import (
 
 log = logging.getLogger(__name__)
 
-BRAND_PARAMS = {
-    "BMW": "BMW",
-    "Mercedes-Benz": "Mercedes-Benz",
-    "Audi": "Audi",
-    "Porsche": "Porsche",
-    "Jaguar": "Jaguar",
-    "Land Rover": "Land Rover",
-    "Volvo": "Volvo",
-    "Tesla": "Tesla",
-    "Lexus": "Lexus",
-}
+from utils.config import get_brand_slugs
+BRAND_PARAMS = get_brand_slugs("autotrader")
 
 POSTCODE = "SW1A 1AA"  # Central London
 BASE_URL = "https://www.autotrader.co.uk"

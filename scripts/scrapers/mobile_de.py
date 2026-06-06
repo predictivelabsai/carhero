@@ -26,18 +26,8 @@ from scripts.scrapers.base import (
 
 log = logging.getLogger(__name__)
 
-# mobile.de uses numeric brand codes in the ms= parameter
-BRAND_CODES = {
-    "BMW": "3500",
-    "Mercedes-Benz": "17200",
-    "Audi": "1900",
-    "Porsche": "20100",
-    "Jaguar": "11600",
-    "Land Rover": "15600",
-    "Volvo": "25100",
-    "Tesla": "27300",
-    "Lexus": "15400",
-}
+from utils.config import get_brand_slugs
+BRAND_CODES = get_brand_slugs("mobile_de")
 
 BASE_URL = "https://suchen.mobile.de"
 MAX_PAGES = 50
