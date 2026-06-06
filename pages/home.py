@@ -1,5 +1,7 @@
 from fasthtml.common import *
+from fasthtml.common import NotStr
 from utils.i18n import t, agent_t, get_lang
+from chat.components import signin_overlay
 
 
 def _stat(value, label):
@@ -24,8 +26,8 @@ def home_page(sess=None):
             P(t('hero_body', lang),
               cls='mt-5 text-base text-gray-500 max-w-xl leading-relaxed'),
             Div(
-                A(t('hero_cta_start', lang), href='/app',
-                  cls='inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium no-underline bg-black text-white hover:bg-gray-800 transition-colors'),
+                A(t('hero_cta_start', lang), href='#', onclick='showSignIn();return false',
+                  cls='inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium no-underline bg-black text-white hover:bg-gray-800 transition-colors cursor-pointer'),
                 A(t('hero_cta_explore', lang), href='/app/market-map',
                   cls='inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium no-underline bg-transparent text-black border border-gray-200 hover:border-black transition-colors'),
                 cls='mt-8 flex items-center gap-3 flex-wrap',
@@ -123,8 +125,8 @@ def home_page(sess=None):
         Div(
             H2(t('cta_headline', lang), cls='text-2xl md:text-3xl font-medium text-black mb-4'),
             P(t('cta_body', lang), cls='text-gray-500 text-sm max-w-xl mx-auto mb-8 leading-relaxed'),
-            A(t('hero_cta_start', lang), href='/app',
-              cls='inline-flex items-center px-6 py-3 rounded-full text-sm font-medium no-underline bg-black text-white hover:bg-gray-800 transition-colors'),
+            A(t('hero_cta_start', lang), href='#', onclick='showSignIn();return false',
+              cls='inline-flex items-center px-6 py-3 rounded-full text-sm font-medium no-underline bg-black text-white hover:bg-gray-800 transition-colors cursor-pointer'),
             cls='max-w-7xl mx-auto px-5 md:px-6 text-center',
         ),
         cls='py-14 md:py-20 border-t border-gray-100 bg-gray-50',
@@ -143,7 +145,102 @@ def home_page(sess=None):
         cls='py-6 border-t border-gray-100',
     )
 
+    auth_modal = signin_overlay(lang)
+
+    auth_js = Script(NotStr("""
+function switchAuthTab(tab) {
+    document.getElementById('auth-form-login').style.display = tab === 'login' ? '' : 'none';
+    document.getElementById('auth-form-register').style.display = tab === 'register' ? '' : 'none';
+    document.getElementById('auth-form-forgot').style.display = tab === 'forgot' ? '' : 'none';
+    document.querySelectorAll('.auth-tab').forEach(function(t) { t.classList.remove('active'); });
+    var tabEl = document.getElementById('auth-tab-' + tab);
+    if (tabEl) tabEl.classList.add('active');
+}
+function showForgotPassword(e) { e && e.preventDefault(); switchAuthTab('forgot'); }
+function showSignIn() {
+    document.getElementById('signin-overlay').classList.add('visible');
+    switchAuthTab('login');
+}
+async function doLogin() {
+    var email = document.getElementById('login-email').value.trim();
+    var password = document.getElementById('login-password').value;
+    var errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    if (!email || !password) { errEl.textContent = 'Email and password required'; return; }
+    var resp = await fetch('/auth/login', { method: 'POST', body: new URLSearchParams({ email: email, password: password }) });
+    var data = await resp.json();
+    if (data.ok) { window.location.href = '/app'; }
+    else if (data.error === 'no_password') {
+        errEl.innerHTML = 'No password set. <a href="#" onclick="showSetPassword(\\'' + email + '\\');return false" style="color:#000;font-weight:600;">Set one now</a>';
+    } else { errEl.textContent = data.error || 'Login failed'; }
+}
+async function doRegister() {
+    var name = document.getElementById('reg-name').value.trim();
+    var email = document.getElementById('reg-email').value.trim();
+    var password = document.getElementById('reg-password').value;
+    var errEl = document.getElementById('reg-error');
+    var okEl = document.getElementById('reg-success');
+    errEl.textContent = ''; okEl.textContent = '';
+    if (!email || !password) { errEl.textContent = 'Email and password required'; return; }
+    var resp = await fetch('/auth/register', { method: 'POST', body: new URLSearchParams({ email: email, password: password, name: name }) });
+    var data = await resp.json();
+    if (data.ok) { okEl.textContent = data.message || 'Check your email to verify'; }
+    else { errEl.textContent = data.error || 'Registration failed'; }
+}
+async function doForgot() {
+    var email = document.getElementById('forgot-email').value.trim();
+    var msgEl = document.getElementById('forgot-msg');
+    msgEl.textContent = '';
+    if (!email) { msgEl.textContent = 'Enter your email'; msgEl.style.color = '#DC2626'; return; }
+    var resp = await fetch('/auth/forgot', { method: 'POST', body: new URLSearchParams({ email: email }) });
+    var data = await resp.json();
+    msgEl.style.color = '#16A34A';
+    msgEl.textContent = data.message || 'Reset link sent if account exists';
+}
+function showSetPassword(email) {
+    var form = document.getElementById('auth-form-login');
+    form.innerHTML = '<p style="font-size:13px;color:#4B5563;margin-bottom:12px;">Set a password for <strong>' + email + '</strong></p>'
+        + '<input type="password" id="set-pw-input" placeholder="New password (min 6 chars)" style="width:100%;padding:8px 12px;border:1px solid #E5E7EB;border-radius:6px;font-size:14px;margin-bottom:12px;">'
+        + '<div id="set-pw-error" style="color:#DC2626;font-size:12px;margin-bottom:8px;"></div>'
+        + '<button onclick="doSetPassword(\\'' + email + '\\')" style="padding:8px 16px;background:#000;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Set Password</button>';
+}
+async function doSetPassword(email) {
+    var password = document.getElementById('set-pw-input').value;
+    var errEl = document.getElementById('set-pw-error');
+    if (!password || password.length < 6) { errEl.textContent = 'Min 6 characters'; return; }
+    var resp = await fetch('/auth/set-password', { method: 'POST', body: new URLSearchParams({ email: email, password: password }) });
+    var data = await resp.json();
+    if (data.ok) window.location.href = '/app';
+    else errEl.textContent = data.error || 'Failed';
+}
+document.addEventListener('click', function(e) {
+    var overlay = document.getElementById('signin-overlay');
+    if (e.target === overlay) overlay.classList.remove('visible');
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var overlay = document.getElementById('signin-overlay');
+        if (overlay) overlay.classList.remove('visible');
+    }
+});
+"""))
+
+    auth_css = Style("""
+.signin-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; align-items:center; justify-content:center; z-index:100; }
+.signin-overlay.visible { display:flex; }
+.auth-tab { padding:8px 16px; font-size:13px; font-weight:500; background:transparent; border:none; border-bottom:2px solid transparent; color:#6B7280; cursor:pointer; }
+.auth-tab.active { color:#1A1A1A; border-bottom-color:#1A1A1A; }
+.google-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:10px 16px; border:1px solid #dadce0; border-radius:6px; background:#fff; font-size:14px; font-weight:500; color:#3c4043; text-decoration:none; cursor:pointer; transition:background 0.15s, box-shadow 0.15s; }
+.google-btn:hover { background:#f7f8f8; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.google-btn-icon { display:flex; align-items:center; }
+.google-btn-text { font-family:'Inter',sans-serif; }
+.google-divider { display:flex; align-items:center; gap:12px; margin:14px 0; }
+.google-divider-line { flex:1; height:1px; background:#e5e7eb; }
+.google-divider-text { font-size:12px; color:#9ca3af; }
+""")
+
     return Div(
         hero, stats, features, how, agents_section, brands_section, cta, sources,
+        auth_modal, auth_css, auth_js,
         style='overflow-x:hidden',
     )

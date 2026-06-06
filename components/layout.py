@@ -68,8 +68,8 @@ def NavBar(active='home', sess=None):
 
     nav_links = [Li(nav_link(k, h, l)) for k, h, l in nav_items]
 
-    cta = A(t('nav_open_app', lang), href='/app',
-            cls='inline-flex items-center px-4 py-2 rounded-full text-xs font-medium bg-black text-white hover:bg-gray-800 transition-colors no-underline')
+    cta = A(t('nav_open_app', lang), href='#', onclick='showSignIn();return false',
+            cls='inline-flex items-center px-4 py-2 rounded-full text-xs font-medium bg-black text-white hover:bg-gray-800 transition-colors no-underline cursor-pointer')
 
     return Nav(
         Div(
