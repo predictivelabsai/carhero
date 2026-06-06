@@ -457,4 +457,13 @@
     window.sendMessage = sendMessage;
     window.renderMarkdownLite = renderMarkdownLite;
     window.enhanceTables = enhanceTables;
+
+    // Auto-send deal query from email deep-link (?deal=BMW+X5)
+    const dealParam = new URLSearchParams(window.location.search).get("deal");
+    if (dealParam && !getSidFromURL()) {
+        setTimeout(() => {
+            fillChat("search: show me price arbitrage deals for " + dealParam);
+            sendMessage(null);
+        }, 300);
+    }
 })();

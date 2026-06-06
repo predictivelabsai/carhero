@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
+from urllib.parse import quote
 
 log = logging.getLogger(__name__)
 
@@ -138,31 +139,42 @@ def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
     period = "Morning" if now.hour < 12 else ("Afternoon" if now.hour < 17 else "Evening")
 
     deal_rows = ""
+    link_style = "color:inherit; text-decoration:none;"
     for d in deals:
         savings_pct = float(d.get("savings_pct") or 0)
         badge_color = "#16A34A" if savings_pct >= 15 else "#F59E0B" if savings_pct >= 8 else "#6B7280"
         cheapest_src = _source_label(d.get("cheapest_country"), d.get("cheapest_provider"))
         priciest_src = _source_label(d.get("priciest_country"), d.get("priciest_provider"))
+        deal_url = f"{BASE_URL}/app?deal={quote(d['make'] + ' ' + d['model'])}"
 
         deal_rows += f"""
         <tr>
             <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB;">
-                <strong style="color:#1A1A1A; font-size:14px;">{d['make']} {d['model']}</strong><br>
-                <span style="font-size:11px; color:#6B7280;">{int(d.get('listing_count') or 0)} listings</span>
+                <a href="{deal_url}" style="{link_style}">
+                    <strong style="color:#1A1A1A; font-size:14px;">{d['make']} {d['model']}</strong><br>
+                    <span style="font-size:11px; color:#6B7280;">{int(d.get('listing_count') or 0)} listings</span>
+                </a>
             </td>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right; font-family:'Courier New',monospace; font-size:13px;">
-                {_fmt_eur(d.get('min_price'))}<br>
-                <span style="font-size:10px; color:#6B7280;">{cheapest_src}</span>
+            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
+                <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px;">
+                    {_fmt_eur(d.get('min_price'))}<br>
+                    <span style="font-size:10px; color:#6B7280;">{cheapest_src}</span>
+                </a>
             </td>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right; font-family:'Courier New',monospace; font-size:13px;">
-                {_fmt_eur(d.get('max_price'))}<br>
-                <span style="font-size:10px; color:#6B7280;">{priciest_src}</span>
+            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
+                <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px;">
+                    {_fmt_eur(d.get('max_price'))}<br>
+                    <span style="font-size:10px; color:#6B7280;">{priciest_src}</span>
+                </a>
             </td>
             <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:center;">
-                <span style="background:{badge_color}; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">
-                    {savings_pct:.0f}%
-                </span><br>
-                <span style="font-size:11px; color:#16A34A; font-weight:600;">Save {_fmt_eur(d.get('savings_eur'))}</span>
+                <a href="{deal_url}" style="{link_style}">
+                    <span style="background:{badge_color}; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">
+                        {savings_pct:.0f}%
+                    </span><br>
+                    <span style="font-size:11px; color:#16A34A; font-weight:600;">Save {_fmt_eur(d.get('savings_eur'))}</span><br>
+                    <span style="font-size:10px; color:#000; font-weight:500;">Ask CarHero &rarr;</span>
+                </a>
             </td>
         </tr>"""
 
@@ -170,19 +182,26 @@ def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
     for c in cheapest:
         km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else "--"
         src = _source_label(c.get("country"), c.get("provider"))
+        deal_url = f"{BASE_URL}/app?deal={quote(c['make'] + ' ' + c['model'])}"
         cheapest_rows += f"""
         <tr>
             <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB;">
-                <strong>{c['make']} {c['model']}</strong>
-                <span style="color:#6B7280; font-size:12px;">
-                    {c.get('variant') or ''} · {c.get('year') or ''} · {km}
-                </span>
+                <a href="{deal_url}" style="{link_style}">
+                    <strong>{c['make']} {c['model']}</strong>
+                    <span style="color:#6B7280; font-size:12px;">
+                        {c.get('variant') or ''} · {c.get('year') or ''} · {km}
+                    </span>
+                </a>
             </td>
-            <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right; font-family:'Courier New',monospace; font-size:13px; font-weight:600; color:#1A1A1A;">
-                {_fmt_eur(c.get('price_eur'))}
+            <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
+                <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px; font-weight:600; color:#1A1A1A;">
+                    {_fmt_eur(c.get('price_eur'))}
+                </a>
             </td>
-            <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right; font-size:11px; color:#6B7280;">
-                {src}
+            <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
+                <a href="{deal_url}" style="{link_style} font-size:11px; color:#6B7280;">
+                    {src}
+                </a>
             </td>
         </tr>"""
 

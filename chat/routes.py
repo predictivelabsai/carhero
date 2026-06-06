@@ -249,9 +249,13 @@ def register_chat_routes(rt):
                         output = getattr(raw, "content", None) or (raw if isinstance(raw, str) else str(raw))
                         yield sse.event(sse.TOOL_END, {"name": name, "output": output[:2000]})
 
-                        if isinstance(output, str) and output.startswith("__ARTIFACT__"):
+                        if isinstance(output, str) and "__ARTIFACT__" in output:
                             try:
-                                payload = json.loads(output[len("__ARTIFACT__"):])
+                                artifact_str = output[output.index("__ARTIFACT__") + len("__ARTIFACT__"):]
+                                sep = artifact_str.find("\n\n")
+                                if sep != -1:
+                                    artifact_str = artifact_str[:sep]
+                                payload = json.loads(artifact_str)
                                 yield sse.event(sse.ARTIFACT, payload)
                             except Exception:
                                 pass
