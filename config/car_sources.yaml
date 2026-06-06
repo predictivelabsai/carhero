@@ -1,0 +1,25 @@
+providers:
+  autotrader:
+    name: "AutoTrader UK"
+    base_url: "https://www.autotrader.co.uk"
+    country: "GB"
+    currency: "GBP"
+    locale: "en-GB"
+  mobile_de:
+    name: "mobile.de"
+    base_url: "https://www.mobile.de"
+    country: "DE"
+    currency: "EUR"
+    locale: "de-DE"
+  autoscout24:
+    name: "AutoScout24"
+    base_url: "https://www.autoscout24.com"
+    country: "EU"
+    currency: "EUR"
+    locale: "en-GB"
+  autohero:
+    name: "Autohero"
+    base_url: "https://www.autohero.com"
+    country: "DE"
+    currency: "EUR"
+    locale: "de-DE"

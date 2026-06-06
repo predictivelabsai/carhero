@@ -1,0 +1,144 @@
+-- CarHero database schema
+-- Target: PostgreSQL 14+
+
+CREATE SCHEMA IF NOT EXISTS carhero;
+
+-- ─── Chat tables ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS carhero.chat_users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS carhero.chat_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES carhero.chat_users(id),
+    title VARCHAR(255) DEFAULT 'New chat',
+    agent_slug VARCHAR(100),
+    share_token VARCHAR(64),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS carhero.chat_messages (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER REFERENCES carhero.chat_sessions(id),
+    role VARCHAR(20) NOT NULL,
+    content TEXT NOT NULL,
+    agent_slug VARCHAR(100),
+    tool_calls JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─── Car listing tables ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS carhero.car_listings (
+    id SERIAL PRIMARY KEY,
+    -- Identification
+    make VARCHAR(100) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    variant VARCHAR(200),
+    generation VARCHAR(100),
+    -- Pricing
+    price_eur NUMERIC(12,2),
+    price_original NUMERIC(12,2),
+    currency VARCHAR(3) DEFAULT 'EUR',
+    -- Specs
+    year INTEGER,
+    mileage_km INTEGER,
+    fuel_type VARCHAR(50),
+    transmission VARCHAR(50),
+    body_type VARCHAR(50),
+    engine_size_cc INTEGER,
+    power_hp INTEGER,
+    power_kw INTEGER,
+    torque_nm INTEGER,
+    -- Drivetrain
+    drive_type VARCHAR(20),
+    steering_side VARCHAR(5),
+    gears INTEGER,
+    -- Efficiency
+    co2_grams INTEGER,
+    fuel_consumption_l100km NUMERIC(4,1),
+    emission_class VARCHAR(20),
+    -- Body
+    doors INTEGER,
+    seats INTEGER,
+    exterior_color VARCHAR(50),
+    interior_color VARCHAR(50),
+    interior_material VARCHAR(50),
+    -- Condition
+    condition VARCHAR(20) DEFAULT 'used',
+    first_registration_date DATE,
+    owners_count INTEGER,
+    accident_free BOOLEAN,
+    service_history BOOLEAN,
+    -- Features
+    features JSONB,
+    equipment_packages JSONB,
+    -- Listing metadata
+    source_url VARCHAR(500) UNIQUE,
+    provider VARCHAR(50) NOT NULL,
+    country VARCHAR(5),
+    city VARCHAR(100),
+    seller_type VARCHAR(20),
+    seller_name VARCHAR(200),
+    listed_date DATE,
+    scraped_at TIMESTAMPTZ DEFAULT NOW(),
+    -- Media
+    image_urls JSONB,
+    image_count INTEGER DEFAULT 0,
+    -- Status
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS carhero.price_history (
+    id SERIAL PRIMARY KEY,
+    listing_id INTEGER REFERENCES carhero.car_listings(id),
+    price_eur NUMERIC(12,2),
+    recorded_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS carhero.car_models (
+    id SERIAL PRIMARY KEY,
+    make VARCHAR(100) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    generation VARCHAR(100),
+    body_type VARCHAR(50),
+    production_start INTEGER,
+    production_end INTEGER,
+    segment VARCHAR(50),
+    UNIQUE(make, model, generation)
+);
+
+CREATE TABLE IF NOT EXISTS carhero.market_snapshots (
+    id SERIAL PRIMARY KEY,
+    make VARCHAR(100),
+    model VARCHAR(100),
+    country VARCHAR(5),
+    avg_price_eur NUMERIC(12,2),
+    median_price_eur NUMERIC(12,2),
+    listing_count INTEGER,
+    avg_mileage_km INTEGER,
+    avg_age_years NUMERIC(4,1),
+    snapshot_date DATE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─── Indexes ────────────────────────────────────────────────────────────────
+
+CREATE INDEX IF NOT EXISTS idx_car_listings_make ON carhero.car_listings(make);
+CREATE INDEX IF NOT EXISTS idx_car_listings_model ON carhero.car_listings(make, model);
+CREATE INDEX IF NOT EXISTS idx_car_listings_provider ON carhero.car_listings(provider);
+CREATE INDEX IF NOT EXISTS idx_car_listings_price ON carhero.car_listings(price_eur);
+CREATE INDEX IF NOT EXISTS idx_car_listings_year ON carhero.car_listings(year);
+CREATE INDEX IF NOT EXISTS idx_car_listings_country ON carhero.car_listings(country);
+CREATE INDEX IF NOT EXISTS idx_car_listings_fuel ON carhero.car_listings(fuel_type);
+CREATE INDEX IF NOT EXISTS idx_car_listings_status ON carhero.car_listings(status);
+CREATE INDEX IF NOT EXISTS idx_price_history_listing ON carhero.price_history(listing_id);
+CREATE INDEX IF NOT EXISTS idx_market_snapshots_date ON carhero.market_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON carhero.chat_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON carhero.chat_messages(session_id);
