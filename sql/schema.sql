@@ -217,6 +217,32 @@ CREATE TABLE IF NOT EXISTS carhero.garage_cars (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── User Profiles / Preferences ──────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS carhero.user_profiles (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES carhero.chat_users(id) ON DELETE CASCADE UNIQUE,
+    avatar_url VARCHAR(500),
+    phone VARCHAR(30),
+    country VARCHAR(5),
+    city VARCHAR(100),
+    currency VARCHAR(3) DEFAULT 'EUR',
+    language VARCHAR(5) DEFAULT 'en',
+    budget_min_eur NUMERIC(12,2),
+    budget_max_eur NUMERIC(12,2),
+    preferred_makes JSONB DEFAULT '[]',
+    preferred_body_types JSONB DEFAULT '[]',
+    preferred_fuel_types JSONB DEFAULT '[]',
+    preferred_transmission VARCHAR(20),
+    max_mileage_km INTEGER,
+    min_year INTEGER,
+    max_year INTEGER,
+    notify_new_listings BOOLEAN DEFAULT TRUE,
+    notify_price_drops BOOLEAN DEFAULT TRUE,
+    notify_weekly_digest BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ─── Indexes ────────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_car_listings_make ON carhero.car_listings(make);
@@ -241,3 +267,4 @@ CREATE INDEX IF NOT EXISTS idx_favorites_user ON carhero.favorites(user_id);
 CREATE INDEX IF NOT EXISTS idx_favorites_listing ON carhero.favorites(listing_id);
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON carhero.saved_searches(user_id);
 CREATE INDEX IF NOT EXISTS idx_garage_cars_user ON carhero.garage_cars(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user ON carhero.user_profiles(user_id);

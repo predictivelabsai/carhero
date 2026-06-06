@@ -205,12 +205,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "lt": "Dirbtinio intelekto valdomas automobilių konsultavimas, jungiantis rinkos žvalgybą, kainų analitiką ir vertinimo įrankius.",
     },
     "hero_cta_start": {
-        "en": "Start Advisory", "et": "Alusta nõustamist",
-        "de": "Beratung starten", "fr": "Démarrer le conseil",
-        "sv": "Starta rådgivning", "lv": "Sākt konsultāciju",
-        "no": "Start rådgivning", "da": "Start rådgivning",
-        "pl": "Rozpocznij doradztwo", "nl": "Advies starten",
-        "fi": "Aloita neuvonta", "lt": "Pradėti konsultaciją",
+        "en": "Sign In", "et": "Logi sisse",
+        "de": "Anmelden", "fr": "Se connecter",
+        "sv": "Logga in", "lv": "Pierakstīties",
+        "no": "Logg inn", "da": "Log ind",
+        "pl": "Zaloguj się", "nl": "Inloggen",
+        "fi": "Kirjaudu", "lt": "Prisijungti",
     },
     "hero_cta_explore": {
         "en": "Explore Market", "et": "Avasta turg",

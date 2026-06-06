@@ -103,6 +103,17 @@
 .agent-item:hover { background: var(--bg-alt); color: var(--ink); }
 .agent-icon { font-size: 12px; }
 
+.workspace-link {
+  display: block;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-radius: 4px;
+  margin: 0 4px;
+}
+.workspace-link:hover { background: var(--bg-alt); color: var(--ink); }
+
 .auth-section {
   border-top: 1px solid var(--border);
   padding: 8px 12px;
