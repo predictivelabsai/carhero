@@ -1,0 +1,25 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5010:5010"
+    environment:
+      - DB_URL=${DB_URL}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - XAI_BASE_URL=${XAI_BASE_URL}
+      - GROK_MODEL=${GROK_MODEL}
+      - EXA_API_KEY=${EXA_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - APP_SECRET=${APP_SECRET}
+    labels:
+      - coolify.managed=true
+      - coolify.port=5010
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5010/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
