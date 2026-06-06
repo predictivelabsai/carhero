@@ -86,7 +86,7 @@ def _fetch_treemap_data(params: dict):
                 FROM carhero.car_listings
                 {where}
                 GROUP BY make, model, country
-                HAVING COUNT(*) >= 2
+                HAVING COUNT(*) >= 1
             ),
             aggregated AS (
                 SELECT make, model,
@@ -122,7 +122,7 @@ def _fetch_trend_data(params: dict):
             FROM carhero.car_listings
             {where}
             GROUP BY year, make
-            HAVING COUNT(*) >= 2
+            HAVING COUNT(*) >= 1
             ORDER BY year
         """)
         return [dict(r._mapping) for r in db.execute(sql, bind)]
@@ -154,7 +154,7 @@ def _fetch_geo_data(params: dict):
             FROM carhero.car_listings
             {where}
             GROUP BY country, provider
-            HAVING COUNT(*) >= 2
+            HAVING COUNT(*) >= 1
             ORDER BY avg_price
         """)
         return [dict(r._mapping) for r in db.execute(sql, bind)]

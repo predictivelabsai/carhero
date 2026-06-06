@@ -328,6 +328,42 @@
         if (p.kind === "chart") {
             return '<div style="color:var(--ink-muted);font-size:12px">Loading chart...</div>';
         }
+        if (p.kind === "deals" && Array.isArray(p.deals)) {
+            if (!p.deals.length) return '<p style="color:var(--ink-muted)">No deals found.</p>';
+            return p.deals.map(d => {
+                const ch = d.cheapest;
+                const pr = d.priciest;
+                const fmtPrice = n => "EUR " + Number(n).toLocaleString();
+                const fmtKm = n => n ? Number(n).toLocaleString() + " km" : "";
+                const specs = (o) => [o.variant, o.year, fmtKm(o.mileage_km), o.fuel_type, o.transmission].filter(Boolean).join(" · ");
+                const badgeColor = d.savings_pct >= 15 ? "#16A34A" : d.savings_pct >= 8 ? "#F59E0B" : "#6B7280";
+                return `
+                <div class="deal-card">
+                    <div class="deal-header">
+                        <span class="deal-title">${d.make} ${d.model}</span>
+                        <span class="deal-badge" style="background:${badgeColor}">Save ${d.savings_pct.toFixed(0)}%</span>
+                    </div>
+                    <div class="deal-row deal-priciest">
+                        <div class="deal-row-label">Higher price</div>
+                        <div class="deal-row-price">${fmtPrice(pr.price_eur)}</div>
+                        <div class="deal-row-source">${pr.provider_label} · ${pr.country_label}</div>
+                        <div class="deal-row-specs">${specs(pr)}</div>
+                        ${pr.url ? `<a href="${pr.url}" target="_blank" class="deal-link">View listing &rarr;</a>` : ""}
+                    </div>
+                    <div class="deal-savings">
+                        <span class="deal-savings-arrow">&#x2193;</span>
+                        Save <strong>${fmtPrice(d.savings_eur)}</strong>
+                    </div>
+                    <div class="deal-row deal-cheapest">
+                        <div class="deal-row-label">Lower price</div>
+                        <div class="deal-row-price deal-price-good">${fmtPrice(ch.price_eur)}</div>
+                        <div class="deal-row-source">${ch.provider_label} · ${ch.country_label}</div>
+                        <div class="deal-row-specs">${specs(ch)}</div>
+                        ${ch.url ? `<a href="${ch.url}" target="_blank" class="deal-link deal-link-good">View listing &rarr;</a>` : ""}
+                    </div>
+                </div>`;
+            }).join("");
+        }
         if (p.kind === "table" && Array.isArray(p.rows)) {
             if (!p.rows.length) return '<p><em>No rows.</em></p>';
             const cols = p.columns || Object.keys(p.rows[0]);
