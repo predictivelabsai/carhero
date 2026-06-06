@@ -8,6 +8,8 @@ from pages.home import home_page
 from pages.about import about_page
 from pages.contact import contact_page
 
+from starlette.responses import JSONResponse as _JSONResponse
+
 from db import init_db
 
 app, rt = fast_app(
@@ -16,6 +18,11 @@ app, rt = fast_app(
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@rt("/health")
+def health():
+    return _JSONResponse({"status": "ok"})
 
 
 # --- Language switching ---
@@ -67,4 +74,4 @@ async def startup():
         print(f"DB init warning: {e}")
 
 
-serve(port=int(os.environ.get('PORT', 5010)))
+serve(port=int(os.environ.get('PORT', 5010)), reload=False)
