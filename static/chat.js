@@ -57,8 +57,7 @@
         }
         const step = document.createElement("div");
         step.className = "tool-step";
-        const argStr = args ? JSON.stringify(args).slice(0, 140) : "";
-        step.innerHTML = `-> <span class="tool-name">${name}</span> <span class="tool-args">${argStr}</span>`;
+        step.innerHTML = `-> <span class="tool-name">${name}</span>`;
         log.appendChild(step);
     }
 

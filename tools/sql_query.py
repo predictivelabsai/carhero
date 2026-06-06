@@ -98,7 +98,7 @@ def _run_query(question: str) -> str:
         db.close()
 
     if not rows:
-        return f"No results found.\n\nSQL used: {sql}"
+        return "No results found for this query."
 
     df = pd.DataFrame(rows)
 
