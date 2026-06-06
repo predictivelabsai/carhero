@@ -208,6 +208,7 @@ def dismiss_cookies(page):
         "#onetrust-accept-btn-handler",
         "button:has-text('OK')",
         "button:has-text('Accept')",
+        "button:has-text('AGREE')",
     ]
     for sel in selectors:
         try:

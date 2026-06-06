@@ -43,7 +43,7 @@ carhero.car_listings (
     first_registration_date DATE, owners_count INTEGER,
     accident_free BOOLEAN, service_history BOOLEAN,
     features JSONB, equipment_packages JSONB,
-    source_url VARCHAR(500) UNIQUE, provider VARCHAR(50) ('autotrader','mobile_de','autoscout24','autohero'),
+    source_url VARCHAR(500) UNIQUE, provider VARCHAR(50) ('autotrader','mobile_de','autoscout24','autohero','theparking'),
     country VARCHAR(5) ('GB','DE','EU'), city VARCHAR(100),
     seller_type VARCHAR(20) ('dealer','private'), seller_name VARCHAR(200),
     listed_date DATE, scraped_at TIMESTAMPTZ,

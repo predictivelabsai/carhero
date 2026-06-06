@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("scrape")
 
-PROVIDERS = ["autoscout24", "autotrader", "mobile_de", "autohero"]
+PROVIDERS = ["autoscout24", "autotrader", "mobile_de", "autohero", "theparking"]
 
 
 def get_scraper(provider: str):
@@ -33,6 +33,8 @@ def get_scraper(provider: str):
         from scripts.scrapers.mobile_de import scrape
     elif provider == "autohero":
         from scripts.scrapers.autohero import scrape
+    elif provider == "theparking":
+        from scripts.scrapers.theparking import scrape
     else:
         raise ValueError(f"Unknown provider: {provider}")
     return scrape
