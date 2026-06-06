@@ -143,10 +143,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nl": "Contact", "fi": "Yhteystiedot", "lt": "Kontaktai",
     },
     "nav_open_app": {
-        "en": "Open App", "et": "Ava rakendus", "de": "App öffnen",
-        "fr": "Ouvrir l'app", "sv": "Öppna appen", "lv": "Atvērt lietotni",
-        "no": "Åpne appen", "da": "Åbn appen", "pl": "Otwórz aplikację",
-        "nl": "App openen", "fi": "Avaa sovellus", "lt": "Atidaryti programą",
+        "en": "Sign In", "et": "Logi sisse", "de": "Anmelden",
+        "fr": "Se connecter", "sv": "Logga in", "lv": "Pierakstīties",
+        "no": "Logg inn", "da": "Log ind", "pl": "Zaloguj się",
+        "nl": "Inloggen", "fi": "Kirjaudu", "lt": "Prisijungti",
     },
     "nav_login": {
         "en": "Login", "et": "Logi sisse", "de": "Anmelden",
