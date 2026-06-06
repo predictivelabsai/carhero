@@ -49,89 +49,77 @@ def _build_search_url(brand: str, page: int = 1) -> str:
 
 def _extract_listings(page) -> list[dict]:
     return page.evaluate("""() => {
-        const items = document.querySelectorAll('li');
+        const items = document.querySelectorAll('li.li-result');
         const results = [];
 
         for (const el of items) {
-            const h2 = el.querySelector('h2');
-            if (!h2) continue;
+            // Title lives in .right-result-bloc h2 > a with span.title-block children
+            const rightBloc = el.querySelector('.right-result-bloc');
+            if (!rightBloc) continue;
 
-            const link = h2.querySelector('a');
+            const link = rightBloc.querySelector('h2 a');
             if (!link) continue;
 
-            const titleSpans = link.querySelectorAll('span');
+            const titleSpans = link.querySelectorAll('span.title-block');
             if (titleSpans.length < 2) continue;
 
             const make = titleSpans[0] ? titleSpans[0].textContent.trim() : '';
             const model = titleSpans[1] ? titleSpans[1].textContent.trim() : '';
-            const variant = titleSpans[2] ? titleSpans[2].textContent.trim() : '';
-
-            // Price — look for € in nearby text
-            const priceEl = el.querySelector('p[class]') ||
-                           h2.parentElement.querySelector('p');
-            let priceText = '';
-            // Try to find price from the container next to the title
-            const allPs = el.querySelectorAll('p');
-            for (const p of allPs) {
-                const t = p.textContent.trim();
-                if (t.includes('€') && /\\d/.test(t)) {
-                    priceText = t;
-                    break;
-                }
-            }
-            if (!priceText) {
-                // Check spans/divs for price
-                const allEls = el.querySelectorAll('*');
-                for (const e of allEls) {
-                    if (e.children.length === 0) {
-                        const t = e.textContent.trim();
-                        if (t.includes('€') && /\\d/.test(t) && t.length < 30) {
-                            priceText = t;
-                            break;
-                        }
-                    }
+            // Variant span may contain nested .nowrap spans; use space-joined text
+            let variant = '';
+            if (titleSpans[2]) {
+                const nowraps = titleSpans[2].querySelectorAll('span.nowrap');
+                if (nowraps.length > 0) {
+                    variant = Array.from(nowraps).map(s => s.textContent.trim()).filter(Boolean).join(' ');
+                } else {
+                    variant = titleSpans[2].textContent.trim();
                 }
             }
 
-            // Specs from <ul> <li> elements within the listing
-            const specEls = el.querySelectorAll('ul li');
+            // Price is in p.prix inside the right bloc's .price-block
+            const priceEl = rightBloc.querySelector('.price-block p.prix');
+            const priceText = priceEl ? priceEl.textContent.trim() : '';
+
+            // Specs from ul.info inside .bc-info.bigScreen
+            const specBlock = el.querySelector('.bc-info.bigScreen ul.info');
             const specs = [];
-            for (const s of specEls) {
-                const inner = s.querySelector('span, div');
-                const text = inner ? inner.textContent.trim() : s.textContent.trim();
-                if (text && text.length < 80 && text.length > 1) {
-                    specs.push(text);
-                }
-            }
-
-            // Country
-            let country = '';
-            const countryEls = el.querySelectorAll('*');
-            for (const ce of countryEls) {
-                if (ce.children.length === 0) {
-                    const t = ce.textContent.trim().toUpperCase();
-                    if (['BELGIUM','FRANCE','GERMANY','SPAIN','ITALY','NETHERLANDS',
-                         'AUSTRIA','PORTUGAL','SWITZERLAND','UNITED KINGDOM','UK',
-                         'POLAND','CZECH REPUBLIC'].includes(t)) {
-                        country = t;
-                        break;
+            if (specBlock) {
+                const specItems = specBlock.querySelectorAll('li div.upper');
+                for (const s of specItems) {
+                    const text = s.textContent.trim();
+                    if (text && text.length < 80 && text.length > 1) {
+                        specs.push(text);
                     }
                 }
             }
 
-            // Source site (e.g. "gocar.be", "autoscout24.be")
+            // Country from .location span.upper
+            let country = '';
+            const countryEl = el.querySelector('.location span.upper');
+            if (countryEl) {
+                country = countryEl.textContent.trim().toUpperCase();
+            }
+
+            // Seller type from .seller div
+            let sellerType = '';
+            const sellerEl = el.querySelector('.seller');
+            if (sellerEl) {
+                sellerType = sellerEl.textContent.trim().toLowerCase();
+            }
+
+            // Source site from .site-bottom a.external
             let sourceSite = '';
-            const sourceLink = el.querySelector('p a[href*="/tools/"]');
+            const sourceLink = el.querySelector('.site-bottom a.external');
             if (sourceLink) {
                 sourceSite = sourceLink.textContent.trim();
             }
 
-            // Detail URL
-            const detailUrl = link.href || '';
+            // Detail URL from the title link
+            const detailUrl = link.getAttribute('href') || '';
 
-            // Images
-            const imgEl = el.querySelector('img[src*="theparking"]');
-            const imageUrl = imgEl ? imgEl.src : '';
+            // Image from picture > img (src uses leparking.fr CDN)
+            const imgEl = el.querySelector('picture img');
+            const imageUrl = imgEl ? (imgEl.getAttribute('src') || '') : '';
 
             if (make && priceText) {
                 results.push({
@@ -139,6 +127,7 @@ def _extract_listings(page) -> list[dict]:
                     price_text: priceText,
                     specs,
                     country,
+                    seller_type: sellerType,
                     source_site: sourceSite,
                     source_url: detailUrl,
                     image_urls: imageUrl ? [imageUrl] : [],
@@ -168,7 +157,9 @@ def _parse_listing(raw: dict, brand: str) -> dict:
         if "km" in spec_lower and any(c.isdigit() for c in spec):
             mileage_km = parse_mileage(spec)
         elif re.match(r"^\d{4}$", spec.strip()):
-            year = int(spec.strip())
+            val = int(spec.strip())
+            if 1900 <= val <= 2099:
+                year = val
         elif spec_lower in ("gasoline", "petrol", "benzin", "essence"):
             fuel_type = "Petrol"
         elif spec_lower in ("diesel", "gasoil"):
@@ -210,7 +201,7 @@ def _parse_listing(raw: dict, brand: str) -> dict:
         "power_kw": None,
         "country": country,
         "city": None,
-        "seller_type": "dealer",
+        "seller_type": raw.get("seller_type") or "dealer",
         "seller_name": None,
         "steering_side": "RHD" if country == "GB" else "LHD",
         "source_url": detail_url,

@@ -87,75 +87,54 @@ def _close_popups(page):
 
 
 def _extract_listings(page) -> list[dict]:
-    """Extract car listings from Blocket search results.
-
-    Blocket renders listings as card-style elements with structured data.
-    We wait for content to render then extract via DOM traversal.
-    """
+    """Extract car listings from Blocket search results via article cards."""
     page.wait_for_timeout(3000)
 
     return page.evaluate("""() => {
+        const cards = document.querySelectorAll('article.mobility-search-ad-card');
         const results = [];
 
-        // Find all listing links - they point to /mobility/car/ad/<id>
-        const allLinks = document.querySelectorAll('a[href*="/mobility/car/ad/"]');
-        const seen = new Set();
+        for (const card of cards) {
+            const linkEl = card.querySelector('a.sf-search-ad-link');
+            const href = linkEl ? linkEl.href : '';
+            if (!href) continue;
 
-        for (const link of allLinks) {
-            const href = link.href;
-            if (seen.has(href)) continue;
-            seen.add(href);
+            const h2 = card.querySelector('h2');
+            const title = h2 ? h2.textContent.trim() : '';
 
-            // Walk up to find the card container
-            let card = link;
-            for (let i = 0; i < 8; i++) {
-                if (card.parentElement) card = card.parentElement;
-                else break;
-            }
+            const subtitle = card.querySelector('.text-caption:not(.font-bold)');
+            const variant = subtitle ? subtitle.textContent.trim() : '';
+
+            const specSpan = card.querySelector('span.text-caption.font-bold');
+            const specText = specSpan ? specSpan.textContent.trim() : '';
 
             const text = card.textContent || '';
-
-            // Extract title from the link or nearby heading
-            const headings = card.querySelectorAll('h2, h3, [class*="title"], [class*="Title"]');
-            let title = '';
-            for (const h of headings) {
-                const t = h.textContent.trim();
-                if (t.length > 3 && t.length < 100) { title = t; break; }
-            }
-            if (!title) title = link.textContent.trim().split('\\n')[0];
-
-            // Price: look for kr pattern
             const priceMatch = text.match(/(\\d[\\d\\s]+)\\s*kr/);
             const priceText = priceMatch ? priceMatch[0] : '';
 
-            // Year
-            const yearMatch = text.match(/\\b(19\\d{2}|20[0-3]\\d)\\b/);
+            const yearMatch = specText.match(/\\b(19\\d{2}|20[0-3]\\d)\\b/);
             const year = yearMatch ? yearMatch[1] : '';
 
-            // Mileage
-            const mileageMatch = text.match(/(\\d[\\d\\s]+)\\s*mil/);
+            const mileageMatch = specText.match(/(\\d[\\d\\s]+)\\s*mil/);
             const mileage = mileageMatch ? mileageMatch[0] : '';
 
-            // Fuel type
             const fuelWords = ['bensin', 'diesel', 'el', 'elhybrid', 'laddhybrid'];
             let fuel = '';
-            const textLower = text.toLowerCase();
+            const specLower = specText.toLowerCase();
             for (const fw of fuelWords) {
-                if (textLower.includes(fw)) { fuel = fw; break; }
+                if (specLower.includes(fw)) { fuel = fw; break; }
             }
 
-            // Transmission
             let trans = '';
-            if (textLower.includes('automatisk') || textLower.includes('automat')) trans = 'automatisk';
-            else if (textLower.includes('manuell')) trans = 'manuell';
+            if (specLower.includes('automatisk') || specLower.includes('automat')) trans = 'automatisk';
+            else if (specLower.includes('manuell')) trans = 'manuell';
 
-            // Images
-            const imgs = card.querySelectorAll('img[src*="images"], img[src*="blocket"]');
-            const imageUrls = [...imgs].map(i => i.src).filter(s => s && !s.includes('placeholder'));
+            const imgs = card.querySelectorAll('img[src*="blocketcdn"]');
+            const imageUrls = [...imgs].map(i => i.src).filter(Boolean);
 
             if (title && priceText) {
                 results.push({
-                    title, price_text: priceText, year, mileage, fuel, trans,
+                    title, variant, price_text: priceText, year, mileage, fuel, trans,
                     source_url: href,
                     image_urls: imageUrls.slice(0, 5),
                 });
@@ -168,16 +147,20 @@ def _extract_listings(page) -> list[dict]:
 def _parse_listing(raw: dict, brand: str) -> dict:
     """Normalize a raw Blocket listing."""
     title = raw.get("title", "")
+    variant = raw.get("variant", "")
 
+    MULTI_WORD = ["Mercedes-Benz", "Land Rover", "Alfa Romeo", "Lynk & Co"]
+    make = brand
     model = ""
-    variant = ""
-    title_clean = title
-    brand_lower = brand.lower()
-    if title_clean.lower().startswith(brand_lower):
-        title_clean = title_clean[len(brand):].strip()
-    parts = title_clean.split(" ", 1)
-    model = parts[0] if parts else title_clean
-    variant = parts[1] if len(parts) > 1 else ""
+    for mw in MULTI_WORD:
+        if title.startswith(mw + " ") or title == mw:
+            make = mw
+            model = title[len(mw):].strip()
+            break
+    else:
+        parts = title.split(" ", 1)
+        make = parts[0] if parts else title
+        model = parts[1] if len(parts) > 1 else ""
 
     price_text = raw.get("price_text", "")
     price_sek = parse_price(price_text, "SEK")
@@ -195,7 +178,7 @@ def _parse_listing(raw: dict, brand: str) -> dict:
     if mileage_str:
         m = re.search(r"([\d\s]+)", mileage_str.replace(" ", ""))
         if m:
-            mil = int(m.group(1).replace(" ", ""))
+            mil = int(m.group(1).replace(" ", "").replace("\xa0", ""))
             mileage_km = mil * 10  # 1 Swedish mil = 10 km
 
     fuel_raw = raw.get("fuel", "").lower()
@@ -206,7 +189,7 @@ def _parse_listing(raw: dict, brand: str) -> dict:
 
     return {
         "provider": "blocket",
-        "make": brand,
+        "make": make,
         "model": model,
         "variant": variant or None,
         "price": price_sek,

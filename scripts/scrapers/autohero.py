@@ -33,49 +33,70 @@ def _build_search_url(brand_slug: str, page: int = 1) -> str:
     return f"{BASE_URL}/de/search/?make={brand_slug}&sort=price_desc&page={page}"
 
 
+def _dismiss_autohero_cookies(page):
+    """Dismiss Autohero's cookie consent popup."""
+    try:
+        btn = page.locator("button:has-text('Alle akzeptieren'), button:has-text('Accept All'), button:has-text('alle akzeptieren')")
+        if btn.count() > 0:
+            btn.first.click()
+            time.sleep(1)
+            return True
+    except Exception:
+        pass
+    try:
+        btn = page.locator("#onetrust-accept-btn-handler")
+        if btn.count() > 0:
+            btn.first.click()
+            time.sleep(1)
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _extract_listings(page) -> list[dict]:
     """Extract listing data from Autohero search results via JS."""
     return page.evaluate("""() => {
-        const cards = document.querySelectorAll('article, [class*="listing"], [class*="CarCard"], [data-testid*="listing"]');
+        const cards = document.querySelectorAll('a[data-qa-selector="ad-card-link"]');
         const results = [];
 
         for (const el of cards) {
-            // Title
-            const headingEl = el.querySelector('h2, h3, [class*="title"], [class*="headline"]');
-            if (!headingEl) continue;
-            const title = headingEl.textContent.trim();
-            if (!title) continue;
+            const label = el.getAttribute('aria-label') || '';
+            const href = el.href || '';
 
-            // Price
-            const priceEl = el.querySelector('[class*="price"], [class*="Price"]');
-            const priceText = priceEl ? priceEl.textContent.trim() : '';
-
-            // Specs — mileage, year, fuel, transmission, etc.
-            const specEls = el.querySelectorAll('[class*="spec"] span, [class*="detail"] span, [class*="Attribute"], li');
+            const specEls = el.querySelectorAll('li[class*="specItem"]');
             const specs = [...specEls].map(s => s.textContent.trim()).filter(s => s.length > 0 && s.length < 100);
 
-            // Detail URL
-            const linkEl = el.querySelector('a[href*="/de/"], a[href*="/search/"]');
-            let detailUrl = '';
-            if (linkEl) {
-                detailUrl = linkEl.href;
-                if (detailUrl.startsWith('/')) {
-                    detailUrl = window.location.origin + detailUrl;
+            const priceMatch = label.match(/([\d.,]+)\s*€/);
+            const priceText = priceMatch ? priceMatch[1].replace(/\./g, '').replace(',', '.') : '';
+
+            const imgEls = el.querySelectorAll('img[src*="autohero"]');
+            const imageUrls = [...imgEls].map(img => img.src).filter(Boolean);
+
+            if (label && priceText) {
+                const titleClean = label.replace(/\s*-?\s*[\d.,]+\s*€.*$/, '').trim();
+                const parts = titleClean.split(' - ');
+                const namePart = parts[0] || titleClean;
+                const variantPart = parts.slice(1).join(' - ');
+                const multiWordMakes = ['Mercedes-Benz', 'Land Rover', 'Alfa Romeo'];
+                let make = '', model = '';
+                let matched = false;
+                for (const mw of multiWordMakes) {
+                    if (namePart.startsWith(mw + ' ') || namePart === mw) {
+                        make = mw; model = namePart.substring(mw.length).trim(); matched = true; break;
+                    }
                 }
-            }
+                if (!matched) {
+                    const words = namePart.split(' ');
+                    make = words[0]; model = words.slice(1).join(' ');
+                }
 
-            // Images
-            const imgEls = el.querySelectorAll('img');
-            const imageUrls = [...imgEls]
-                .map(img => img.src || img.dataset.src || '')
-                .filter(s => s && !s.includes('placeholder') && !s.includes('logo'));
-
-            if (title && priceText) {
                 results.push({
-                    title,
+                    title: titleClean,
+                    make: make, model: model, variant: variantPart,
                     price_text: priceText,
                     specs,
-                    source_url: detailUrl,
+                    source_url: href.startsWith('/') ? window.location.origin + href : href,
                     image_urls: imageUrls,
                 });
             }
@@ -86,23 +107,9 @@ def _extract_listings(page) -> list[dict]:
 
 def _parse_listing(raw: dict, brand: str) -> dict:
     """Convert raw JS-extracted data into a normalized listing dict."""
-    title = raw.get("title", "")
-
-    # Parse model from title
-    model = ""
-    variant = ""
-    brand_lower = brand.lower().replace("-", " ")
-    title_clean = title
-    if title.lower().startswith(brand_lower):
-        title_clean = title[len(brand):].strip()
-    elif title.lower().startswith(brand_lower.split()[0]):
-        title_clean = title[len(brand):].strip()
-
-    parts = title_clean.split(" ", 1)
-    model = parts[0] if parts else title_clean
-    variant = parts[1] if len(parts) > 1 else ""
-    if len(variant) > 200:
-        variant = variant[:200]
+    make = raw.get("make", brand)
+    model = raw.get("model", "")
+    variant = raw.get("variant", "")
 
     # Price
     price_text = raw.get("price_text", "")
@@ -158,7 +165,7 @@ def _parse_listing(raw: dict, brand: str) -> dict:
 
     return {
         "provider": "autohero",
-        "make": brand,
+        "make": make,
         "model": model,
         "variant": variant or None,
         "price": price,
@@ -217,6 +224,7 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
                 time.sleep(2)
 
                 if not cookies_dismissed:
+                    _dismiss_autohero_cookies(page)
                     dismiss_cookies(page)
                     cookies_dismissed = True
                     time.sleep(1)

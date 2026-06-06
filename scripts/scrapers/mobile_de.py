@@ -1,13 +1,20 @@
 """mobile.de scraper — Germany's largest car marketplace.
 
 Uses German formatting (period = thousands separator) and brand codes in URLs.
-Listings are in article elements with structured specs strings.
+Requires Firefox via Playwright to bypass Akamai Bot Manager anti-bot protection.
+
+Listings are <a> tags with data-testid="result-listing-N" containing:
+  - h2 with model/variant spans (class "eO87w" and "dc_Br")
+  - [data-testid="price-label"] for price text
+  - [data-testid="listing-details-attributes"] for specs string
+  - [data-testid="seller-info"] for seller/location info
+  - imgs with data-testid="result-listing-image-*" for images
 
 URL pattern:
     https://suchen.mobile.de/fahrzeuge/search.html?dam=false&isSearchRequest=true
         &ms={brand_code}%3B%3B%3B&sb=p&sd=d&s=Car&vc=Car&pageNumber=1
 
-Specs string format: "EZ 10/2022 . 134.287 km . 250 kW (340 PS) . Diesel"
+Specs string format: "EZ 10/2022 • 134.287 km • 250 kW (340 PS) • Benzin"
 Cookie consent: button "Einverstanden"
 """
 
@@ -44,64 +51,100 @@ def _build_search_url(brand_code: str, page: int = 1) -> str:
 
 
 def _extract_listings(page) -> list[dict]:
-    """Extract listing data from mobile.de search results via JS."""
-    return page.evaluate("""() => {
-        const articles = document.querySelectorAll('article, [class*="listing"], [data-testid="result-listing"]');
-        const results = [];
+    """Extract listing data from mobile.de search results via JS.
 
-        for (const el of articles) {
-            // Title/heading
-            const headingEl = el.querySelector('h2, h3, [class*="headline"], [data-testid="result-listing-title"]');
-            if (!headingEl) continue;
-            const title = headingEl.textContent.trim();
+    Listings are <a data-testid="result-listing-N"> elements.
+    Each contains structured sub-elements accessed by data-testid.
+    """
+    return page.evaluate("""() => {
+        const links = document.querySelectorAll('a[data-testid^="result-listing-"]');
+        const results = [];
+        const seen = new Set();
+
+        for (const el of links) {
+            const testId = el.getAttribute('data-testid');
+            // Skip image-only test ids (e.g. "result-listing-image-1")
+            if (testId.includes('image')) continue;
+
+            // Title: h2 > span.eO87w (model) + span.dc_Br (variant)
+            const h2 = el.querySelector('h2');
+            if (!h2) continue;
+            // Model span has class "eO87w", variant span has class "dc_Br"
+            const modelSpan = h2.querySelector('[class*="eO87w"]');
+            const variantSpan = h2.querySelector('[class*="dc_Br"]');
+            const modelTitle = modelSpan ? (modelSpan.getAttribute('title') || modelSpan.textContent.trim()) : '';
+            const variantTitle = variantSpan ? (variantSpan.getAttribute('title') || variantSpan.textContent.trim()) : '';
+            const title = (modelTitle + ' ' + variantTitle).trim();
             if (!title) continue;
 
-            // Price — German format: "35.890 €¹"
-            const priceEl = el.querySelector('[class*="price"], [data-testid="price-label"]');
+            // Price: [data-testid="price-label"]
+            const priceEl = el.querySelector('[data-testid="price-label"]');
             const priceText = priceEl ? priceEl.textContent.trim() : '';
 
-            // Specs string: "EZ 10/2022 · 134.287 km · 250 kW (340 PS) · Diesel"
-            const specEl = el.querySelector('[class*="vehicle-data"], [class*="spec"], [class*="rms-"]');
+            // Specs: [data-testid="listing-details-attributes"]
+            const specEl = el.querySelector('[data-testid="listing-details-attributes"]');
             const specText = specEl ? specEl.textContent.trim() : '';
 
-            // Also try to get individual spec items
-            const specItems = el.querySelectorAll('[class*="vehicle-data"] span, [class*="spec"] span');
-            const specList = [...specItems].map(s => s.textContent.trim()).filter(s => s.length > 0);
-
-            // Tags: "Unfallfrei", "Nicht fahrtauglich", etc.
-            const tagEls = el.querySelectorAll('[class*="tag"], [class*="badge"], [class*="label"]');
-            const tags = [...tagEls].map(t => t.textContent.trim()).filter(t => t.length > 0);
-
-            // Seller info
-            const sellerEl = el.querySelector('[class*="seller"], [class*="dealer"]');
-            const sellerText = sellerEl ? sellerEl.textContent.trim() : '';
-
-            // Location
-            const locationEl = el.querySelector('[class*="location"], [class*="address"]');
-            const locationText = locationEl ? locationEl.textContent.trim() : '';
-
-            // Detail URL
-            const linkEl = el.querySelector('a[href*="/fahrzeuge/details"], a[href*="details.html"]');
-            let detailUrl = '';
-            if (linkEl) {
-                detailUrl = linkEl.href;
-                if (detailUrl.startsWith('/')) {
-                    detailUrl = window.location.origin + detailUrl;
+            // Seller info: [data-testid="seller-info"]
+            const sellerEl = el.querySelector('[data-testid="seller-info"]');
+            let sellerName = '';
+            let locationText = '';
+            if (sellerEl) {
+                // Dealer name is in span with class containing "rjHf7"
+                const nameSpan = sellerEl.querySelector('[class*="rjHf7"]');
+                sellerName = nameSpan ? nameSpan.textContent.trim() : '';
+                // Location is in div with class "Kh0Rn" — text after the dealer info
+                const locDiv = sellerEl.querySelector('[class*="Kh0Rn"]');
+                if (locDiv) {
+                    // Get all direct text nodes (location is a text node child)
+                    const walker = document.createTreeWalker(locDiv, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while (node = walker.nextNode()) {
+                        const txt = node.textContent.trim();
+                        // Location pattern: "92245 Kümmersbruck" or "51149 Köln, Privatanbieter"
+                        if (/\\d{5}/.test(txt)) {
+                            locationText = txt;
+                            break;
+                        }
+                    }
                 }
             }
 
-            // Images
-            const imgEls = el.querySelectorAll('img[src*="mobile.de"], img[src*="img.classistatic"]');
-            const imageUrls = [...imgEls].map(img => img.src).filter(s => s && !s.includes('placeholder'));
+            // Detail URL: the <a> element itself has the href
+            let detailUrl = el.href || '';
+            if (detailUrl.startsWith('/')) {
+                detailUrl = window.location.origin + detailUrl;
+            }
+
+            // Deduplicate by URL
+            if (detailUrl && seen.has(detailUrl)) continue;
+            if (detailUrl) seen.add(detailUrl);
+
+            // Images: img elements with data-testid containing "result-listing-image"
+            const imgEls = el.querySelectorAll('img[data-testid^="result-listing-image"]');
+            const imageUrls = [];
+            for (const img of imgEls) {
+                // Prefer highest resolution from srcset
+                const srcset = img.getAttribute('srcset') || '';
+                if (srcset) {
+                    const parts = srcset.split(',').map(s => s.trim());
+                    const last = parts[parts.length - 1].split(' ')[0];
+                    if (last && !last.includes('placeholder')) imageUrls.push(last);
+                } else {
+                    const src = img.src || '';
+                    if (src && !src.includes('placeholder') && src.includes('classistatic'))
+                        imageUrls.push(src);
+                }
+            }
 
             if (title && priceText) {
                 results.push({
                     title,
+                    model_name: modelTitle,
+                    variant_name: variantTitle,
                     price_text: priceText,
                     spec_text: specText,
-                    spec_list: specList,
-                    tags,
-                    seller_text: sellerText,
+                    seller_name: sellerName,
                     location_text: locationText,
                     source_url: detailUrl,
                     image_urls: imageUrls,
@@ -141,7 +184,9 @@ def _parse_specs_string(spec_text: str) -> dict:
             result["power_str"] = part
         elif part_lower in ("diesel", "benzin", "elektro", "hybrid",
                             "plug-in-hybrid", "erdgas/cng", "autogas/lpg",
-                            "wasserstoff", "ethanol"):
+                            "wasserstoff", "ethanol") or \
+             part_lower.startswith("hybrid"):
+            # Handle composite types like "Hybrid (Benzin/Elektro)"
             result["fuel_type"] = part
 
     return result
@@ -149,21 +194,35 @@ def _parse_specs_string(spec_text: str) -> dict:
 
 def _parse_listing(raw: dict, brand: str) -> dict:
     """Convert raw JS-extracted data into a normalized listing dict."""
-    title = raw.get("title", "")
+    # The new DOM provides model_name and variant_name separately.
+    # model_name is e.g. "BMW 220 Active Tourer", variant_name is the detail line.
+    model_name = raw.get("model_name", "")
+    variant_name = raw.get("variant_name", "")
 
-    # Parse model from title: "BMW 540 d Touring xDrive Luxury Line..."
+    # Strip brand prefix from model_name: "BMW 220 Active Tourer" → "220 Active Tourer"
     model = ""
-    variant = ""
+    variant = variant_name
     brand_lower = brand.lower().replace("-", " ")
-    title_clean = title
-    if title.lower().startswith(brand_lower):
-        title_clean = title[len(brand):].strip()
-    elif title.lower().startswith(brand_lower.split()[0]):
-        title_clean = title[len(brand):].strip()
+    model_clean = model_name
+    if model_name.lower().startswith(brand_lower):
+        model_clean = model_name[len(brand):].strip()
+    elif brand_lower.split()[0] and model_name.lower().startswith(brand_lower.split()[0]):
+        # Handle partial match, e.g. "Mercedes" from "Mercedes-Benz"
+        first_word = brand_lower.split()[0]
+        model_clean = model_name[len(first_word):].strip()
+        # Also strip the hyphenated part if present, e.g. "-Benz"
+        if model_clean.startswith("-"):
+            rest = model_clean[1:]
+            remaining_brand = brand_lower[len(first_word) + 1:]  # e.g. "benz"
+            if rest.lower().startswith(remaining_brand):
+                model_clean = rest[len(remaining_brand):].strip()
 
-    parts = title_clean.split(" ", 1)
-    model = parts[0] if parts else title_clean
-    variant = parts[1] if len(parts) > 1 else ""
+    parts = model_clean.split(" ", 1)
+    model = parts[0] if parts else model_clean
+    # If variant is empty, use remainder of model_name as variant
+    if not variant and len(parts) > 1:
+        variant = parts[1]
+
     # Truncate long variant
     if len(variant) > 200:
         variant = variant[:200]
@@ -172,21 +231,10 @@ def _parse_listing(raw: dict, brand: str) -> dict:
     price_text = raw.get("price_text", "")
     price = parse_price(price_text, "EUR")
 
-    # Parse specs from combined string or individual items
+    # Parse specs string: "EZ 03/2023 • 45.331 km • 115 kW (156 PS) • Benzin"
+    # May also contain damage info: "Reparierter Unfallschaden • EZ 03/2023 • ..."
     spec_text = raw.get("spec_text", "")
-    spec_list = raw.get("spec_list", [])
     specs = _parse_specs_string(spec_text)
-
-    # If spec_text parsing didn't work, try individual items
-    if not specs["mileage_str"] and spec_list:
-        for item in spec_list:
-            item_lower = item.lower()
-            if "km" in item_lower and any(c.isdigit() for c in item):
-                specs["mileage_str"] = item
-            elif "kw" in item_lower or "ps" in item_lower:
-                specs["power_str"] = item
-            elif "ez" in item_lower or re.search(r"\d{1,2}/\d{4}", item):
-                specs["registration_str"] = item
 
     mileage_km = parse_mileage(specs["mileage_str"]) if specs["mileage_str"] else None
     power_hp, power_kw = parse_power(specs["power_str"]) if specs["power_str"] else (None, None)
@@ -206,22 +254,25 @@ def _parse_listing(raw: dict, brand: str) -> dict:
         "ethanol": "Ethanol",
     }
     if fuel_type:
-        fuel_type = fuel_map.get(fuel_type.lower(), fuel_type)
+        # Handle composite types like "Hybrid (Benzin/Elektro)"
+        fuel_lower = fuel_type.lower().split("(")[0].strip()
+        fuel_type = fuel_map.get(fuel_lower, fuel_type)
 
-    # Tags
-    tags = raw.get("tags", [])
-    accident_free = any("unfallfrei" in t.lower() for t in tags)
+    # Accident-free detection from spec_text (now embedded in specs string)
+    spec_lower = spec_text.lower()
+    accident_free = "unfallfrei" in spec_lower
+    # Note: "Reparierter Unfallschaden" means repaired accident damage (not accident-free)
 
     # Seller
-    seller_text = raw.get("seller_text", "")
+    seller_name_raw = raw.get("seller_name", "")
     location_text = raw.get("location_text", "")
-    seller_type = "private" if "privatanbieter" in (seller_text + location_text).lower() else "dealer"
-    seller_name = seller_text if seller_type == "dealer" and seller_text else None
+    seller_type = "private" if "privatanbieter" in (seller_name_raw + location_text).lower() else "dealer"
+    seller_name = seller_name_raw if seller_type == "dealer" and seller_name_raw else None
 
     # Location — extract city and postal code
+    # Pattern: "92245 Kümmersbruck" or "51149 Köln, Privatanbieter"
     city = None
     if location_text:
-        # Pattern: "51545 Waldbröl" or "81247 München, Privatanbieter"
         loc_match = re.match(r"\d{5}\s+(.+?)(?:,|$)", location_text)
         if loc_match:
             city = loc_match.group(1).strip()
@@ -256,8 +307,25 @@ def _parse_listing(raw: dict, brand: str) -> dict:
     }
 
 
+def _is_blocked(page) -> bool:
+    """Check if the current page is an Akamai block/challenge page."""
+    try:
+        title = page.title()
+        if "Zugriff verweigert" in title or "Access denied" in title:
+            return True
+        html_snippet = page.evaluate("() => document.body ? document.body.innerText.substring(0, 200) : ''")
+        if "Zugriff verweigert" in html_snippet or "Access denied" in html_snippet:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
     """Scrape mobile.de listings for premium brands.
+
+    Uses Firefox to bypass Akamai Bot Manager anti-bot protection.
+    Chromium is detected and blocked by mobile.de.
 
     Args:
         headless: Run browser in headless mode.
@@ -268,7 +336,7 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
     seen_urls = {l.get("source_url") for l in listings if l.get("source_url")}
 
     brands = [brand] if brand else PREMIUM_BRANDS
-    pw, browser, ctx, page = setup_browser(headless=headless)
+    pw, browser, ctx, page = setup_browser(headless=headless, browser_type="firefox")
 
     try:
         cookies_dismissed = False
@@ -285,7 +353,18 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
             for page_num in range(1, MAX_PAGES + 1):
                 url = _build_search_url(brand_code, page_num)
                 safe_navigate(page, url)
-                time.sleep(2)
+                time.sleep(5)
+
+                if _is_blocked(page):
+                    log.warning("Blocked by Akamai on page %d for %s, waiting 30s...",
+                                page_num, brand_name)
+                    time.sleep(30)
+                    safe_navigate(page, url)
+                    time.sleep(5)
+                    if _is_blocked(page):
+                        log.error("Still blocked after retry for %s, stopping brand",
+                                  brand_name)
+                        break
 
                 if not cookies_dismissed:
                     dismiss_cookies(page)
@@ -324,7 +403,7 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
                 if page_num % 25 == 0:
                     save_checkpoint(listings, "mobile_de")
 
-                time.sleep(2)
+                time.sleep(4)
 
         listings = deduplicate(listings)
         save_checkpoint(listings, "mobile_de")

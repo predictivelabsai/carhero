@@ -165,18 +165,46 @@ def parse_registration(text: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-def setup_browser(headless: bool = True):
-    """Launch Playwright Chromium and return (playwright, browser, context, page)."""
+def setup_browser(headless: bool = True, browser_type: str = "chromium"):
+    """Launch Playwright browser and return (playwright, browser, context, page).
+
+    Args:
+        headless: Run browser in headless mode.
+        browser_type: "chromium" (default) or "firefox".
+            Firefox is needed for sites with aggressive bot detection
+            (e.g. Akamai Bot Manager on mobile.de).
+    """
     from playwright.sync_api import sync_playwright
 
     pw = sync_playwright().start()
-    browser = pw.chromium.launch(headless=headless)
-    ctx = browser.new_context(
-        user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                   "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        locale="en-GB",
-        viewport={"width": 1920, "height": 1080},
-    )
+
+    if browser_type == "firefox":
+        browser = pw.firefox.launch(
+            headless=headless,
+            firefox_user_prefs={
+                "dom.webdriver.enabled": False,
+                "useAutomationExtension": False,
+            },
+        )
+        ctx = browser.new_context(
+            user_agent="Mozilla/5.0 (X11; Linux x86_64; rv:130.0) "
+                       "Gecko/20100101 Firefox/130.0",
+            locale="de-DE",
+            viewport={"width": 1920, "height": 1080},
+            timezone_id="Europe/Berlin",
+            extra_http_headers={
+                "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+            },
+        )
+    else:
+        browser = pw.chromium.launch(headless=headless)
+        ctx = browser.new_context(
+            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            locale="en-GB",
+            viewport={"width": 1920, "height": 1080},
+        )
+
     page = ctx.new_page()
     return pw, browser, ctx, page
 

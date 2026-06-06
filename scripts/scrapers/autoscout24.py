@@ -32,65 +32,37 @@ MAX_PAGES = 20  # AutoScout24 limits to 20 pages per search
 
 
 def _extract_listings(page) -> list[dict]:
-    """Extract all article listing items from the current page via JS."""
+    """Extract all article listing items from the current page via data attributes."""
     return page.evaluate("""() => {
-        const articles = document.querySelectorAll('article');
+        const articles = document.querySelectorAll('article[data-guid]');
         return [...articles].map(el => {
-            // Title: make ref + variant ref in heading
-            const heading = el.querySelector('h2, [data-testid="result-listing-title"]');
+            const heading = el.querySelector('h2');
             const title = heading ? heading.textContent.trim() : '';
+            const guid = el.getAttribute('data-guid') || '';
+            const price = el.getAttribute('data-price') || '';
+            const make = el.getAttribute('data-make') || '';
+            const model = el.getAttribute('data-model') || '';
+            const mileage = el.getAttribute('data-mileage') || '';
+            const fuel = el.getAttribute('data-fuel-type') || '';
+            const reg = el.getAttribute('data-first-registration') || '';
+            const country = el.getAttribute('data-listing-country') || '';
 
-            // Price
-            const priceEl = el.querySelector('[data-testid="price-label"], .price');
-            const priceText = priceEl ? priceEl.textContent.trim() : '';
-
-            // Specs grid: registration, km, fuel, power (4 items)
-            const specEls = el.querySelectorAll('[data-testid="spec"] span, .spec-item, [class*="VehicleDetailTable"] span');
+            const specEls = el.querySelectorAll('[class*="ListItemPill"] span, [class*="VehicleDetailTable"] span, [class*="Spec"] span');
             const specs = [...specEls].map(s => s.textContent.trim()).filter(s => s.length > 0);
 
-            // Fallback: try to get specs from any list within the article
-            let specTexts = specs;
-            if (specTexts.length === 0) {
-                const allSpans = el.querySelectorAll('span');
-                const filtered = [...allSpans].map(s => s.textContent.trim()).filter(s => {
-                    return s.match(/\\d/) && (s.includes('km') || s.includes('kW') || s.includes('/') || s.includes('hp'));
-                });
-                specTexts = filtered;
-            }
-
-            // Seller info
-            const sellerEl = el.querySelector('[data-testid="seller-info"], .seller-info, [class*="SellerInfo"]');
-            const sellerText = sellerEl ? sellerEl.textContent.trim() : '';
-
-            // Location
-            const locationEl = el.querySelector('[data-testid="location"], .location');
-            const locationText = locationEl ? locationEl.textContent.trim() : '';
-
-            // Detail URL
-            const linkEl = el.querySelector('a[href*="/offers/"], a[href*="/lst/"]');
-            let detailUrl = '';
-            if (linkEl) {
-                detailUrl = linkEl.href;
-                // Ensure absolute URL
-                if (detailUrl.startsWith('/')) {
-                    detailUrl = window.location.origin + detailUrl;
-                }
-            }
-
-            // Images
             const imgEls = el.querySelectorAll('img[src*="autoscout24"], img[src*="as24"]');
             const imageUrls = [...imgEls].map(img => img.src).filter(s => s && !s.includes('placeholder'));
 
+            const detailUrl = guid ? 'https://www.autoscout24.com/offers/' + guid : '';
+
             return {
-                title,
-                price_text: priceText,
-                specs: specTexts,
-                seller_text: sellerText,
-                location_text: locationText,
-                source_url: detailUrl,
-                image_urls: imageUrls,
+                title, price_text: price, specs,
+                source_url: detailUrl, image_urls: imageUrls,
+                data_make: make, data_model: model,
+                data_mileage: mileage, data_fuel: fuel,
+                data_reg: reg, data_country: country,
             };
-        }).filter(item => item.title && item.price_text);
+        }).filter(item => item.price_text);
     }""")
 
 
@@ -112,13 +84,13 @@ def _parse_listing(raw: dict, brand: str) -> dict:
     model = parts[0] if parts else remainder
     variant = parts[1] if len(parts) > 1 else ""
 
-    # Price
+    # Price — data-price is numeric, use directly
     price_text = raw.get("price_text", "")
-    price = parse_price(price_text, "EUR")
+    price = int(price_text) if price_text.isdigit() else parse_price(price_text, "EUR")
 
     # Specs: typically [registration, mileage, fuel_type, power]
     specs = raw.get("specs", [])
-    registration_str = ""
+    registration_str = raw.get("data_reg", "")
     mileage_str = ""
     fuel_type = ""
     power_str = ""
@@ -137,26 +109,26 @@ def _parse_listing(raw: dict, brand: str) -> dict:
                             "petrol/electric", "diesel/electric"):
             fuel_type = spec
 
-    mileage_km = parse_mileage(mileage_str) if mileage_str else None
+    # Use data attributes as primary source, fall back to spec parsing
+    data_mileage = raw.get("data_mileage", "")
+    mileage_km = int(data_mileage) if data_mileage.isdigit() else (parse_mileage(mileage_str) if mileage_str else None)
+
     power_hp, power_kw = parse_power(power_str) if power_str else (None, None)
     reg_month, reg_year = parse_registration(registration_str) if registration_str else (None, None)
 
-    # Location / country
-    location_text = raw.get("location_text", "")
-    country = None
-    city = None
-    # Pattern: "DE-63868 Großwallstadt" or "ES-38207 38207"
-    loc_match = re.match(r"([A-Z]{2})-\d+\s*(.*)", location_text)
-    if loc_match:
-        country = loc_match.group(1)
-        city = loc_match.group(2).strip() or None
-    elif location_text:
-        city = location_text
+    FUEL_CODE_MAP = {"d": "Diesel", "b": "Petrol", "e": "Electric", "lpg": "LPG",
+                     "cng": "CNG", "h": "Hydrogen", "m": "Hybrid", "o": "Other"}
+    data_fuel = raw.get("data_fuel", "")
+    if not fuel_type and data_fuel:
+        fuel_type = FUEL_CODE_MAP.get(data_fuel, data_fuel.capitalize())
 
-    # Seller
-    seller_text = raw.get("seller_text", "")
-    seller_type = "private" if "private" in seller_text.lower() else "dealer"
-    seller_name = seller_text if seller_type == "dealer" else None
+    COUNTRY_CODE_MAP = {"d": "DE", "a": "AT", "b": "BE", "e": "ES", "f": "FR",
+                        "i": "IT", "l": "LU", "nl": "NL", "ch": "CH"}
+    data_country = raw.get("data_country", "")
+    country = COUNTRY_CODE_MAP.get(data_country, data_country.upper() if data_country else None)
+    city = None
+    seller_type = "dealer"
+    seller_name = None
 
     return {
         "provider": "autoscout24",
@@ -212,7 +184,7 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
             brand_count = 0
 
             for page_num in range(1, MAX_PAGES + 1):
-                url = f"{BASE_URL}/lst/{slug}?atype=C&desc=1&sort=price&page={page_num}"
+                url = f"{BASE_URL}/lst/{slug}?atype=C&desc=0&sort=standard&ustate=N%2CU&size=20&page={page_num}&cy=D%2CA%2CB%2CE%2CF%2CI%2CL%2CNL"
                 safe_navigate(page, url)
                 time.sleep(2)
 
@@ -250,8 +222,7 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
                     log.info("Reached limit of %d for %s", limit, brand_name)
                     break
 
-                # Checkpoint every 25 pages
-                if page_num % 25 == 0:
+                if page_num % 5 == 0:
                     save_checkpoint(listings, "autoscout24")
 
                 time.sleep(2)
