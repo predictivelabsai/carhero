@@ -74,4 +74,4 @@ async def startup():
         print(f"DB init warning: {e}")
 
 
-serve(port=int(os.environ.get('PORT', 5010)), reload=False)
+serve(port=int(os.environ.get('PORT', 5011)), reload=False)

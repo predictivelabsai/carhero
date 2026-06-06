@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "5010:5010"
+      - "5011:5011"
     environment:
       - DB_URL=${DB_URL}
       - XAI_API_KEY=${XAI_API_KEY}
@@ -15,9 +15,9 @@ services:
       - APP_SECRET=${APP_SECRET}
     labels:
       - coolify.managed=true
-      - coolify.port=5010
+      - coolify.port=5011
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5010/health').read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5011/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
