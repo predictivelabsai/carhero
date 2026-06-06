@@ -13,6 +13,14 @@ services:
       - EXA_API_KEY=${EXA_API_KEY}
       - LLM_PROVIDER=${LLM_PROVIDER}
       - APP_SECRET=${APP_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - POSTMARK_API_TOKEN=${POSTMARK_API_TOKEN}
+      - FROM_EMAIL=${FROM_EMAIL}
+      - FROM_NAME=${FROM_NAME}
+      - TO_EMAIL=${TO_EMAIL}
+      - LOGIN=${LOGIN}
+      - PORT=${PORT}
     labels:
       - coolify.managed=true
       - coolify.port=5011
