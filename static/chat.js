@@ -317,11 +317,22 @@
             }
         }
 
-        document.querySelector(".app").classList.remove("pane-closed");
-        const rp = $("#right-pane");
-        if (rp) rp.classList.add("open");
-        const ab = $("#artifact-btn");
-        if (ab) ab.classList.add("active");
+        const isMobile = window.innerWidth <= 768;
+        if (!isMobile) {
+            document.querySelector(".app").classList.remove("pane-closed");
+            const rp = $("#right-pane");
+            if (rp) rp.classList.add("open");
+            const ab = $("#artifact-btn");
+            if (ab) ab.classList.add("active");
+        } else {
+            // On mobile, just pulse the << toggle to hint results are ready
+            const tog = $(".right-pane-toggle");
+            if (tog) {
+                tog.style.background = "#000";
+                tog.style.color = "#fff";
+                setTimeout(() => { tog.style.background = ""; tog.style.color = ""; }, 2000);
+            }
+        }
     }
 
     function renderArtifactHTML(p) {
