@@ -454,6 +454,32 @@
         autoResize(ta);
     };
     window.newChat = () => { window.location.href = "/app"; };
+    const _checkSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+    const _shareSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+    const _copySvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    const _linkSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+
+    function _flashIcon(btn, origSvg, duration) {
+        btn.innerHTML = _checkSvg;
+        btn.classList.add("copied");
+        setTimeout(() => { btn.innerHTML = origSvg; btn.classList.remove("copied"); }, duration || 2000);
+    }
+    function _copyToClipboard(text, cb) {
+        try {
+            navigator.clipboard.writeText(text).then(cb, () => { _fallbackCopy(text); cb(); });
+        } catch(e) { _fallbackCopy(text); cb(); }
+    }
+    function _fallbackCopy(text) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch(e) {}
+        document.body.removeChild(ta);
+    }
+
     window.copyChat = () => {
         const msgs = document.querySelectorAll(".msg");
         const lines = [];
@@ -462,44 +488,33 @@
             const bubble = m.querySelector(".msg-bubble");
             if (bubble) lines.push(`${role}: ${bubble.textContent.trim()}`);
         });
-        navigator.clipboard.writeText(lines.join("\n\n"));
+        const btn = $("#copy-chat-btn");
+        _copyToClipboard(lines.join("\n\n"), () => { if (btn) _flashIcon(btn, _copySvg); });
     };
     window.shareChat = () => {
         if (!currentSessionId) return;
         const btn = $("#share-chat-btn");
-        const orig = btn ? btn.textContent : "Share";
         fetch("/api/share/" + currentSessionId, { method: "POST" })
             .then(r => r.json())
             .then(data => {
                 if (data.url) {
                     const full = window.location.origin + data.url;
-                    const done = () => {
-                        if (btn) btn.textContent = "✓ Link copied";
-                        setTimeout(() => { if (btn) btn.textContent = orig; }, 2000);
-                    };
-                    try {
-                        navigator.clipboard.writeText(full).then(done, () => {
-                            try { _fallbackCopy(full); } catch(e) {}
-                            done();
-                        });
-                    } catch(e) {
-                        try { _fallbackCopy(full); } catch(e2) {}
-                        done();
-                    }
+                    _copyToClipboard(full, () => { if (btn) _flashIcon(btn, _shareSvg); });
                 }
             })
             .catch(() => {});
     };
-    function _fallbackCopy(text) {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-    }
+    window.shareSession = (sid, btn) => {
+        fetch("/api/share/" + sid, { method: "POST" })
+            .then(r => r.json())
+            .then(data => {
+                if (data.url) {
+                    const full = window.location.origin + data.url;
+                    _copyToClipboard(full, () => { if (btn) _flashIcon(btn, _linkSvg); });
+                }
+            })
+            .catch(() => {});
+    };
 
     document.querySelectorAll(".msg-bubble").forEach(b => enhanceTables(b));
 

@@ -271,6 +271,11 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
                 log.warning("No slug for brand %s, skipping", brand_name)
                 continue
 
+            if brand_name != brands[0]:
+                pause = 60 + (hash(brand_name) % 30)
+                log.info("Pausing %ds between brands to avoid bot detection...", pause)
+                time.sleep(pause)
+
             log.info("Scraping coches.net for %s...", brand_name)
             brand_count = 0
 
@@ -302,7 +307,7 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
                     body_text = page.evaluate("() => document.body.innerText")
                     if "algo no va bien" in body_text.lower() or "eres un bot" in body_text.lower():
                         log.warning("Bot detection triggered on page %d, waiting and retrying...", page_num)
-                        time.sleep(10)
+                        time.sleep(30)
                         safe_navigate(page, url)
                         time.sleep(5)
                         body_text = page.evaluate("() => document.body.innerText")

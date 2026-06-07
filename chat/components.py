@@ -125,8 +125,16 @@ def left_pane(user_email=None, sessions=None, current_sid="", lang: str = "en"):
         title = (s.get("title") or "New chat")[:40]
         active_cls = " active" if sid == current_sid else ""
         session_items.append(
-            A(title, href=f"/app?sid={sid}",
-              cls=f"session-item{active_cls}")
+            Div(
+                A(title, href=f"/app?sid={sid}", cls="session-item-link"),
+                Button(
+                    NotStr('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'),
+                    cls="session-share-btn",
+                    title="Copy share link",
+                    onclick=f"event.preventDefault();event.stopPropagation();shareSession('{sid}',this)",
+                ),
+                cls=f"session-item{active_cls}",
+            )
         )
 
     agent_groups = []
@@ -236,9 +244,21 @@ def center_pane(messages=None, current_agent_slug=None, lang: str = "en"):
             ),
             Div(
                 _chat_lang_dropdown(lang),
-                Button(t("chat_share", lang), id="share-chat-btn", onclick="shareChat()", cls="header-action-btn"),
-                Button(t("chat_copy", lang), id="copy-chat-btn", onclick="copyChat()", cls="header-action-btn"),
-                Button(t("chat_canvas", lang), id="artifact-btn", onclick="toggleArtifactPane()", cls="header-action-btn"),
+                Button(
+                    NotStr('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>'),
+                    id="share-chat-btn", onclick="shareChat()",
+                    cls="header-icon-btn", title=t("chat_share", lang),
+                ),
+                Button(
+                    NotStr('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'),
+                    id="copy-chat-btn", onclick="copyChat()",
+                    cls="header-icon-btn", title=t("chat_copy", lang),
+                ),
+                Button(
+                    NotStr('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>'),
+                    id="artifact-btn", onclick="toggleArtifactPane()",
+                    cls="header-icon-btn", title=t("chat_canvas", lang),
+                ),
                 cls="chat-header-actions",
             ),
             cls="chat-header",

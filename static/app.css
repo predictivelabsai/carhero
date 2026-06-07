@@ -53,20 +53,8 @@
 
 .history-section { flex: 0 0 auto; max-height: 200px; overflow-y: auto; }
 .session-list { display: flex; flex-direction: column; }
-.session-item {
-  display: block;
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--ink-muted);
-  text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-radius: 4px;
-  margin: 0 4px;
-}
-.session-item:hover { background: var(--bg-alt); color: var(--ink); }
-.session-item.active { background: var(--bg-alt); color: var(--ink); font-weight: 500; }
+.session-item { margin: 0 4px; }
+.session-item:hover { background: var(--bg-alt); }
 
 .agents-section { flex: 1; overflow-y: auto; }
 .cat-header {
@@ -153,6 +141,81 @@
   text-decoration: none;
 }
 .header-action-btn:hover { background: var(--bg-alt); color: var(--ink); }
+
+.header-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--ink-dim);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  position: relative;
+}
+.header-icon-btn:hover { background: var(--bg-alt); color: var(--ink); }
+.header-icon-btn.copied { color: #22c55e; }
+.header-icon-btn[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #fff;
+  background: var(--ink);
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  margin-top: 4px;
+}
+
+/* Session item with share-on-hover */
+.session-item {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.session-item-link {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-radius: 6px;
+}
+.session-item:hover .session-item-link,
+.session-item.active .session-item-link { color: var(--ink); }
+.session-item.active { background: var(--bg-alt); border-radius: 6px; }
+.session-share-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-right: 4px;
+  color: var(--ink-dim);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.session-item:hover .session-share-btn { display: flex; }
+.session-share-btn:hover { color: var(--ink); background: var(--border); }
+.session-share-btn.copied { display: flex; color: #22c55e; }
 
 .mobile-menu-btn {
   display: none;

@@ -77,15 +77,50 @@ from chat.garage import register_garage_routes
 register_garage_routes(rt)
 
 
-# --- Daily digest scheduler ---
+# --- Scraper + Daily digest scheduler ---
 
-def _start_daily_digest():
-    """Background daemon thread that sends the deals digest once per day."""
+SCRAPE_PROVIDERS = [
+    "autoscout24", "autotrader", "autohero",
+    "auto24_ee", "auto24_lt", "auto24_lv", "blocket",
+    "otomoto", "coches", "marktplaats", "nettiauto", "bilbasen",
+    "donedeal", "finn", "standvirtual", "autovit",
+]
+
+
+def _start_scrape_and_digest():
+    """Background daemon: scrape all providers, load to DB, then send digest.
+
+    Timeline each day:
+        DIGEST_HOUR - 1  →  run all scrapers (sequential, ~45-60 min)
+        after scrape      →  load checkpoint JSONs into DB
+        DIGEST_HOUR       →  send deals digest email to all users
+    """
     import threading
     import time as _time
     from datetime import datetime, timedelta
 
     DIGEST_HOUR = int(os.environ.get("DIGEST_HOUR", "7"))
+    SCRAPE_HOUR = (DIGEST_HOUR - 1) % 24
+
+    def _run_scrapers():
+        from scripts.scrape_cars import get_scraper
+        for provider in SCRAPE_PROVIDERS:
+            try:
+                print(f"INFO:     [scheduler] Scraping {provider}...", flush=True)
+                scraper = get_scraper(provider)
+                scraper(headless=True, limit=0, brand=None)
+            except Exception as e:
+                print(f"ERROR:    [scheduler] Scraper {provider} failed: {e}", flush=True)
+
+    def _load_to_db():
+        from scripts.scrape_cars import load_to_db
+        total = 0
+        for provider in SCRAPE_PROVIDERS:
+            try:
+                total += load_to_db(provider)
+            except Exception as e:
+                print(f"ERROR:    [scheduler] DB load {provider} failed: {e}", flush=True)
+        print(f"INFO:     [scheduler] Loaded {total} new listings to DB", flush=True)
 
     def _run_digest():
         try:
@@ -94,17 +129,26 @@ def _start_daily_digest():
             sys.argv = ["daily_deals", "--all"]
             digest_main()
         except Exception as e:
-            print(f"ERROR:    Daily digest error: {e}", flush=True)
+            print(f"ERROR:    [scheduler] Digest error: {e}", flush=True)
 
     def _loop():
         while True:
             now = datetime.now()
-            target = now.replace(hour=DIGEST_HOUR, minute=0, second=0, microsecond=0)
-            if target <= now:
-                target += timedelta(days=1)
-            wait = (target - now).total_seconds()
-            print(f"INFO:     Daily digest scheduled for {target.strftime('%Y-%m-%d %H:%M')} ({wait/3600:.1f}h from now)", flush=True)
+            scrape_target = now.replace(hour=SCRAPE_HOUR, minute=0, second=0, microsecond=0)
+            if scrape_target <= now:
+                scrape_target += timedelta(days=1)
+            wait = (scrape_target - now).total_seconds()
+            digest_time = scrape_target + timedelta(hours=1)
+            print(f"INFO:     [scheduler] Next scrape: {scrape_target.strftime('%Y-%m-%d %H:%M')} ({wait/3600:.1f}h), digest: {digest_time.strftime('%H:%M')}", flush=True)
             _time.sleep(wait)
+
+            print(f"INFO:     [scheduler] Starting scrape run...", flush=True)
+            _run_scrapers()
+
+            print(f"INFO:     [scheduler] Loading data to DB...", flush=True)
+            _load_to_db()
+
+            print(f"INFO:     [scheduler] Sending digest...", flush=True)
             _run_digest()
 
     t = threading.Thread(target=_loop, daemon=True)
@@ -121,7 +165,7 @@ async def startup():
         print(f"DB init warning: {e}")
 
     if os.environ.get("DIGEST_ENABLED", "1") == "1":
-        _start_daily_digest()
+        _start_scrape_and_digest()
 
 
 serve(port=int(os.environ.get('PORT', 5011)), reload=False)
