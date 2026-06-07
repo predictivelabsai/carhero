@@ -9,6 +9,15 @@ brands:
       blocket: BMW
       mobile_de: "3500"
       auto24: "4"
+      otomoto: bmw
+      standvirtual: bmw
+      autovit: bmw
+      coches: bmw
+      marktplaats: bmw
+      nettiauto: bmw
+      bilbasen: bmw
+      finn: "749"
+      donedeal: BMW
 
   - name: Mercedes-Benz
     featured: true
@@ -20,6 +29,15 @@ brands:
       blocket: Mercedes-Benz
       mobile_de: "17200"
       auto24: "12"
+      otomoto: mercedes-benz
+      standvirtual: mercedes-benz
+      autovit: mercedes-benz
+      coches: mercedes-benz
+      marktplaats: mercedes-benz
+      nettiauto: mercedes-benz
+      bilbasen: mercedes-benz
+      finn: "813"
+      donedeal: Mercedes-Benz
 
   - name: Audi
     featured: false
@@ -31,6 +49,15 @@ brands:
       blocket: Audi
       mobile_de: "1900"
       auto24: "2"
+      otomoto: audi
+      standvirtual: audi
+      autovit: audi
+      coches: audi
+      marktplaats: audi
+      nettiauto: audi
+      bilbasen: audi
+      finn: "744"
+      donedeal: Audi
 
   - name: Porsche
     featured: true
@@ -42,6 +69,15 @@ brands:
       blocket: Porsche
       mobile_de: "20100"
       auto24: "140"
+      otomoto: porsche
+      standvirtual: porsche
+      autovit: porsche
+      coches: porsche
+      marktplaats: porsche
+      nettiauto: porsche
+      bilbasen: porsche
+      finn: "825"
+      donedeal: Porsche
 
   - name: Jaguar
     featured: true
@@ -53,6 +89,15 @@ brands:
       blocket: Jaguar
       mobile_de: "11600"
       auto24: "36"
+      otomoto: jaguar
+      standvirtual: jaguar
+      autovit: jaguar
+      coches: jaguar
+      marktplaats: jaguar
+      nettiauto: jaguar
+      bilbasen: jaguar
+      finn: "790"
+      donedeal: Jaguar
 
   - name: Land Rover
     featured: true
@@ -64,6 +109,15 @@ brands:
       blocket: Land Rover
       mobile_de: "15600"
       auto24: "42"
+      otomoto: land-rover
+      standvirtual: land-rover
+      autovit: land-rover
+      coches: land-rover
+      marktplaats: land-rover
+      nettiauto: land-rover
+      bilbasen: land-rover
+      finn: "798"
+      donedeal: Land Rover
 
   - name: Volvo
     featured: false
@@ -75,6 +129,15 @@ brands:
       blocket: Volvo
       mobile_de: "25100"
       auto24: "10"
+      otomoto: volvo
+      standvirtual: volvo
+      autovit: volvo
+      coches: volvo
+      marktplaats: volvo
+      nettiauto: volvo
+      bilbasen: volvo
+      finn: "845"
+      donedeal: Volvo
 
   - name: Tesla
     featured: true
@@ -86,6 +149,15 @@ brands:
       blocket: Tesla
       mobile_de: "27300"
       auto24: "642"
+      otomoto: tesla
+      standvirtual: tesla
+      autovit: tesla
+      coches: tesla
+      marktplaats: tesla
+      nettiauto: tesla
+      bilbasen: tesla
+      finn: "2078"
+      donedeal: Tesla
 
   - name: Lexus
     featured: false
@@ -97,6 +169,15 @@ brands:
       blocket: Lexus
       mobile_de: "15400"
       auto24: "35"
+      otomoto: lexus
+      standvirtual: lexus
+      autovit: lexus
+      coches: lexus
+      marktplaats: lexus
+      nettiauto: lexus
+      bilbasen: lexus
+      finn: "800"
+      donedeal: Lexus
 
   - name: Maserati
     featured: true
@@ -108,6 +189,15 @@ brands:
       blocket: Maserati
       mobile_de: "16800"
       auto24: "85"
+      otomoto: maserati
+      standvirtual: maserati
+      autovit: maserati
+      coches: maserati
+      marktplaats: maserati
+      nettiauto: maserati
+      bilbasen: maserati
+      finn: "810"
+      donedeal: Maserati
 
   - name: Alfa Romeo
     featured: true
@@ -119,6 +209,15 @@ brands:
       blocket: Alfa Romeo
       mobile_de: "900"
       auto24: "1"
+      otomoto: alfa-romeo
+      standvirtual: alfa-romeo
+      autovit: alfa-romeo
+      coches: alfa-romeo
+      marktplaats: alfa-romeo
+      nettiauto: alfa-romeo
+      bilbasen: alfa-romeo
+      finn: "741"
+      donedeal: Alfa Romeo
 
   - name: Ferrari
     featured: true
@@ -130,3 +229,12 @@ brands:
       blocket: Ferrari
       mobile_de: "8600"
       auto24: "30"
+      otomoto: ferrari
+      standvirtual: ferrari
+      autovit: ferrari
+      coches: ferrari
+      marktplaats: ferrari
+      nettiauto: ferrari
+      bilbasen: ferrari
+      finn: "778"
+      donedeal: Ferrari

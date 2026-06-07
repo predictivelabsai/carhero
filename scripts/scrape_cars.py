@@ -23,7 +23,9 @@ log = logging.getLogger("scrape")
 
 PROVIDERS = [
     "autoscout24", "autotrader", "mobile_de", "autohero", "theparking",
-    "auto24_ee", "auto24_lt", "auto24_lv", "blocket",
+    "auto24_ee", "auto24_lt", "auto24_lv", "blocket", "coches", "bilbasen",
+    "nettiauto", "donedeal", "marktplaats", "otomoto", "standvirtual",
+    "autovit", "finn",
 ]
 
 
@@ -46,6 +48,24 @@ def get_scraper(provider: str):
         from scripts.scrapers.auto24 import scrape_lv as scrape
     elif provider == "blocket":
         from scripts.scrapers.blocket import scrape
+    elif provider == "coches":
+        from scripts.scrapers.coches import scrape
+    elif provider == "bilbasen":
+        from scripts.scrapers.bilbasen import scrape
+    elif provider == "nettiauto":
+        from scripts.scrapers.nettiauto import scrape
+    elif provider == "donedeal":
+        from scripts.scrapers.donedeal import scrape
+    elif provider == "marktplaats":
+        from scripts.scrapers.marktplaats import scrape
+    elif provider == "otomoto":
+        from scripts.scrapers.otomoto import scrape
+    elif provider == "standvirtual":
+        from scripts.scrapers.standvirtual import scrape
+    elif provider == "autovit":
+        from scripts.scrapers.autovit import scrape
+    elif provider == "finn":
+        from scripts.scrapers.finn import scrape
     else:
         raise ValueError(f"Unknown provider: {provider}")
     return scrape

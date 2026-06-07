@@ -233,6 +233,28 @@ def dismiss_cookies(page):
     except Exception:
         pass
 
+    # Finn.no: CMP consent in iframe (title="Cookieinnstillinger")
+    try:
+        iframe_el = page.frame_locator("iframe[title*='Cookie'], iframe[id*='sp_message']")
+        btn = iframe_el.locator("button:has-text('Godta alle')")
+        if btn.count() > 0:
+            btn.first.click()
+            time.sleep(0.5)
+            return True
+    except Exception:
+        pass
+
+    # Bilbasen.dk: CMP consent in iframe
+    try:
+        iframe_el = page.frame_locator("iframe[title*='Cookie']")
+        btn = iframe_el.locator("button:has-text('Kun nødvendige')")
+        if btn.count() > 0:
+            btn.first.click()
+            time.sleep(0.5)
+            return True
+    except Exception:
+        pass
+
     selectors = [
         # mobile.de
         "button:has-text('Einverstanden')",
