@@ -383,6 +383,7 @@
   justify-content: space-between;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .artifact-title { font-size: 14px; font-weight: 600; margin: 0; }
 .artifact-subtitle { font-size: 11px; color: var(--ink-muted); }
@@ -393,6 +394,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+  min-height: 0;
 }
 .artifact-card {
   background: var(--bg);
@@ -464,6 +466,15 @@
   z-index: 40;
 }
 .left-overlay.visible { display: block; }
+
+.right-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.2);
+  z-index: 55;
+}
+.right-overlay.visible { display: block; }
 
 /* -- Language dropdown -- */
 .lang-dropdown {

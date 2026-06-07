@@ -432,15 +432,18 @@
     window.toggleArtifactPane = () => {
         const r = $("#right-pane");
         const app = $(".app");
+        const ro = $("#right-overlay");
         if (!r) return;
         if (r.classList.contains("open")) {
             r.classList.remove("open");
             if (app) app.classList.add("pane-closed");
+            if (ro) ro.classList.remove("visible");
             const ab = $("#artifact-btn");
             if (ab) ab.classList.remove("active");
         } else {
             r.classList.add("open");
             if (app) app.classList.remove("pane-closed");
+            if (ro && window.innerWidth <= 768) ro.classList.add("visible");
             const ab = $("#artifact-btn");
             if (ab) ab.classList.add("active");
         }

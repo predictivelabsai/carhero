@@ -56,6 +56,7 @@ def chat_page(user_email=None, sessions=None, current_sid="",
         Div(id="left-overlay", cls="left-overlay", onclick="toggleLeftPane()"),
         left_pane(user_email=user_email, sessions=sessions, current_sid=current_sid, lang=lang),
         center_pane(messages=messages, current_agent_slug=current_agent_slug, lang=lang),
+        Div(id="right-overlay", cls="right-overlay", onclick="toggleArtifactPane()"),
         right_pane(lang=lang),
         Button(
             NotStr('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>'),
