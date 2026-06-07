@@ -61,3 +61,48 @@ def chat_page(user_email=None, sessions=None, current_sid="",
         cls="bg-white text-ink font-sans antialiased app",
     )
     return Html(_head("Car Advisor"), body)
+
+
+def shared_chat_page(title: str = "Shared Chat", messages=None, agent_slug=None):
+    from agents.registry import AGENTS_BY_SLUG
+
+    msg_els = []
+    for m in (messages or []):
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        agent = m.get("agent_slug")
+        bubble = Div(content, cls="msg-bubble")
+        if role == "assistant" and agent:
+            spec = AGENTS_BY_SLUG.get(agent)
+            agent_label = Div(
+                Div(spec.icon if spec else "*", cls="msg-agent-icon"),
+                Div(spec.name if spec else agent, cls="msg-agent-label"),
+                cls="msg-agent",
+            )
+            msg_els.append(Div(agent_label, bubble, cls=f"msg msg-{role}"))
+        else:
+            msg_els.append(Div(bubble, cls=f"msg msg-{role}"))
+
+    body = Body(
+        Div(
+            Div(
+                Div(title, cls="chat-header-title"),
+                Div(
+                    Div("Shared via CarHero", cls="text-sm text-gray-400"),
+                    cls="chat-header-actions",
+                ),
+                cls="chat-header",
+            ),
+            Div(*msg_els, id="messages", cls="messages"),
+            cls="center-pane",
+            style="max-width:800px;margin:0 auto;",
+        ),
+        Script(src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"),
+        Script(NotStr("""
+            document.querySelectorAll('.msg-bubble').forEach(b => {
+                if (typeof marked !== 'undefined') b.innerHTML = marked.parse(b.textContent);
+            });
+        """)),
+        cls="bg-white text-ink font-sans antialiased",
+    )
+    return Html(_head(title), body)

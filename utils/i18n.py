@@ -611,6 +611,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "no": "Kopier", "da": "Kopier", "pl": "Kopiuj",
         "nl": "Kopiëren", "fi": "Kopioi", "lt": "Kopijuoti",
     },
+    "chat_share": {
+        "en": "Share", "et": "Jaga", "de": "Teilen",
+        "fr": "Partager", "sv": "Dela", "lv": "Dalīties",
+        "no": "Del", "da": "Del", "pl": "Udostępnij",
+        "nl": "Delen", "fi": "Jaa", "lt": "Dalintis",
+    },
     "chat_canvas": {
         "en": "Canvas", "et": "Lõuend", "de": "Leinwand",
         "fr": "Canvas", "sv": "Canvas", "lv": "Audekls",

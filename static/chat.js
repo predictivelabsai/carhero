@@ -464,6 +464,42 @@
         });
         navigator.clipboard.writeText(lines.join("\n\n"));
     };
+    window.shareChat = () => {
+        if (!currentSessionId) return;
+        const btn = $("#share-chat-btn");
+        const orig = btn ? btn.textContent : "Share";
+        fetch("/api/share/" + currentSessionId, { method: "POST" })
+            .then(r => r.json())
+            .then(data => {
+                if (data.url) {
+                    const full = window.location.origin + data.url;
+                    const done = () => {
+                        if (btn) btn.textContent = "✓ Link copied";
+                        setTimeout(() => { if (btn) btn.textContent = orig; }, 2000);
+                    };
+                    try {
+                        navigator.clipboard.writeText(full).then(done, () => {
+                            try { _fallbackCopy(full); } catch(e) {}
+                            done();
+                        });
+                    } catch(e) {
+                        try { _fallbackCopy(full); } catch(e2) {}
+                        done();
+                    }
+                }
+            })
+            .catch(() => {});
+    };
+    function _fallbackCopy(text) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+    }
 
     document.querySelectorAll(".msg-bubble").forEach(b => enhanceTables(b));
 

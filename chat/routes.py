@@ -302,6 +302,65 @@ def register_chat_routes(rt):
         clear_user(request.session)
         return JSONResponse({"ok": True})
 
+    @rt("/api/share/{sid}", methods=["POST"])
+    async def share_session(request: Request, sid: str):
+        sess = request.session
+        uid, _ = _ensure_user(sess)
+        if not uid:
+            return JSONResponse({"error": "not signed in"}, status_code=401)
+        try:
+            sid_int = int(sid)
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "invalid session"}, status_code=400)
+        from sqlalchemy import text
+        db = _get_db()
+        try:
+            row = db.execute(
+                text(f"SELECT share_token FROM {SCHEMA}.chat_sessions WHERE id = :sid AND user_id = :uid"),
+                {"sid": sid_int, "uid": uid},
+            ).fetchone()
+            if not row:
+                return JSONResponse({"error": "session not found"}, status_code=404)
+            token = row[0]
+            if not token:
+                import secrets
+                token = secrets.token_urlsafe(32)
+                db.execute(
+                    text(f"UPDATE {SCHEMA}.chat_sessions SET share_token = :token WHERE id = :sid"),
+                    {"token": token, "sid": sid_int},
+                )
+                db.commit()
+            return JSONResponse({"token": token, "url": f"/shared/{token}"})
+        finally:
+            db.close()
+
+    @rt("/shared/{token}")
+    def shared_chat(token: str):
+        from sqlalchemy import text
+        db = _get_db()
+        try:
+            row = db.execute(
+                text(f"SELECT s.id, s.title, s.agent_slug, u.email "
+                     f"FROM {SCHEMA}.chat_sessions s "
+                     f"JOIN {SCHEMA}.chat_users u ON u.id = s.user_id "
+                     f"WHERE s.share_token = :token"),
+                {"token": token},
+            ).fetchone()
+            if not row:
+                from starlette.responses import HTMLResponse
+                return HTMLResponse("<h2>Chat not found</h2>", status_code=404)
+            sid = row[0]
+            messages = _session_messages(sid)
+        finally:
+            db.close()
+
+        from chat.layout import shared_chat_page
+        return shared_chat_page(
+            title=row[1] or "Shared Chat",
+            messages=messages,
+            agent_slug=row[2],
+        )
+
     @rt("/api/deal/{deal_id}")
     def deal_lookup(deal_id: str):
         from sqlalchemy import text

@@ -236,6 +236,7 @@ def center_pane(messages=None, current_agent_slug=None, lang: str = "en"):
             ),
             Div(
                 _chat_lang_dropdown(lang),
+                Button(t("chat_share", lang), id="share-chat-btn", onclick="shareChat()", cls="header-action-btn"),
                 Button(t("chat_copy", lang), id="copy-chat-btn", onclick="copyChat()", cls="header-action-btn"),
                 Button(t("chat_canvas", lang), id="artifact-btn", onclick="toggleArtifactPane()", cls="header-action-btn"),
                 cls="chat-header-actions",
