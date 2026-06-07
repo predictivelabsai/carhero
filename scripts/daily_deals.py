@@ -34,11 +34,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 
+def _get_recipients(args) -> list[str]:
+    """Return list of email addresses to send the digest to."""
+    if not args.all:
+        return [args.to]
+
+    from db import engine
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT DISTINCT u.email
+            FROM carhero.chat_users u
+            LEFT JOIN carhero.user_profiles p ON p.user_id = u.id
+            WHERE u.is_verified = TRUE
+              AND u.email NOT LIKE '%guest%'
+              AND COALESCE(p.notify_weekly_digest, TRUE) = TRUE
+        """)).fetchall()
+    emails = [r[0] for r in rows if r[0]]
+    if not emails:
+        emails = [args.to]
+    return emails
+
+
 def main():
     parser = argparse.ArgumentParser(description="Send CarHero deals digest")
     parser.add_argument("--to", default=os.getenv("TO_EMAIL", "carhero@predictivelabs.co.uk"))
     parser.add_argument("--from-email", default=os.getenv("FROM_EMAIL", "info@carhero.chat"))
     parser.add_argument("--dry-run", action="store_true", help="Print HTML without sending")
+    parser.add_argument("--all", action="store_true", help="Send to all registered users with digest enabled")
     parser.add_argument("--deals", type=int, default=15, help="Number of top deals")
     parser.add_argument("--cheapest", type=int, default=10, help="Number of cheapest listings")
     args = parser.parse_args()
@@ -63,24 +86,27 @@ def main():
         log.info(f"Dry run complete. Subject: {subject}")
         return
 
-    log.info(f"Sending to {args.to} from {args.from_email}...")
-    result = send_email(
-        to=args.to,
-        subject=subject,
-        html_body=html,
-        text_body=text,
-        from_email=args.from_email,
-        tag="car-deals",
-    )
+    recipients = _get_recipients(args)
+    log.info(f"Sending digest to {len(recipients)} recipient(s) from {args.from_email}...")
 
-    if result.get("ErrorCode") == 0:
-        log.info(f"Sent! MessageID: {result.get('MessageID')}")
-    elif result.get("error"):
-        log.error(f"Failed: {result['error']}")
-        sys.exit(1)
-    else:
-        log.error(f"Postmark error: {result}")
-        sys.exit(1)
+    sent, failed = 0, 0
+    for email in recipients:
+        result = send_email(
+            to=email,
+            subject=subject,
+            html_body=html,
+            text_body=text,
+            from_email=args.from_email,
+            tag="car-deals",
+        )
+        if result.get("ErrorCode") == 0:
+            log.info(f"Sent to {email} (MessageID: {result.get('MessageID')})")
+            sent += 1
+        else:
+            log.error(f"Failed for {email}: {result}")
+            failed += 1
+
+    log.info(f"Digest complete: {sent} sent, {failed} failed")
 
 
 if __name__ == "__main__":
