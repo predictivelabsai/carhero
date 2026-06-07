@@ -155,6 +155,16 @@ def _start_scrape_and_digest():
     t.start()
 
 
+# --- Mount FastAPI mobile API at /api/v1 (optional) ---
+
+try:
+    from api.app import api_router
+    app.mount("/api/v1", api_router)
+    print("INFO:     Mobile API mounted at /api/v1 (docs: /api/v1/docs)")
+except ImportError:
+    print("INFO:     FastAPI not installed — mobile API disabled (monolith mode)")
+
+
 # --- Initialize DB on startup ---
 
 @app.on_event("startup")
