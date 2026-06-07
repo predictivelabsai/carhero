@@ -290,8 +290,11 @@ def center_pane(messages=None, current_agent_slug=None, lang: str = "en"):
 def right_pane(lang: str = "en"):
     return Div(
         Div(
-            H4(t("chat_artifacts_title", lang), cls="artifact-title"),
-            Span(t("chat_artifacts_subtitle", lang), id="artifact-subtitle", cls="artifact-subtitle"),
+            Div(
+                H4(t("chat_artifacts_title", lang), cls="artifact-title"),
+                Span(t("chat_artifacts_subtitle", lang), id="artifact-subtitle", cls="artifact-subtitle"),
+            ),
+            Button(">>", cls="right-pane-close", onclick="toggleArtifactPane()"),
             cls="artifact-header",
         ),
         Div(

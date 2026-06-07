@@ -50,12 +50,14 @@ def chat_page(user_email=None, sessions=None, current_sid="",
               messages=None, current_agent_slug=None, readonly=False, lang="en"):
     from utils.i18n import js_translations
     import json as _json
+    from fasthtml.common import Button
     body = Body(
         signin_overlay(lang=lang),
         Div(id="left-overlay", cls="left-overlay", onclick="toggleLeftPane()"),
         left_pane(user_email=user_email, sessions=sessions, current_sid=current_sid, lang=lang),
         center_pane(messages=messages, current_agent_slug=current_agent_slug, lang=lang),
         right_pane(lang=lang),
+        Button("<<", cls="right-pane-toggle", onclick="toggleArtifactPane()", title="Open results"),
         Script(_json.dumps(js_translations(lang)), id="i18n-data", type="application/json"),
         Script(src="/static/chat.js"),
         cls="bg-white text-ink font-sans antialiased app",

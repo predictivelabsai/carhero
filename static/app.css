@@ -371,6 +371,9 @@
 .right-pane.open { width: 420px; min-width: 420px; }
 
 .artifact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
 }
@@ -653,6 +656,43 @@
 }
 
 /* -- Mobile -- */
+/* -- Right-pane toggle button (visible when pane closed) -- */
+.right-pane-toggle {
+  display: none;
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  color: var(--ink-dim);
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 30;
+  padding: 0;
+  line-height: 48px;
+  text-align: center;
+}
+.right-pane-toggle:hover { background: var(--border); color: var(--ink); }
+
+/* -- Right-pane close button (inside pane header) -- */
+.right-pane-close {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+.right-pane-close:hover { background: var(--bg-alt); color: var(--ink); }
+
 @media (max-width: 768px) {
   .left-pane {
     position: fixed;
@@ -664,8 +704,42 @@
   }
   .left-pane.open { left: 0; }
   .mobile-menu-btn { display: block; }
-  .right-pane.open { width: 100%; min-width: 100%; position: fixed; top: 0; left: 0; z-index: 60; }
-  .pane-closed .right-pane { width: 0; }
+
+  /* Right pane: slide from right, never cover chat */
+  .right-pane {
+    position: fixed;
+    right: -100%;
+    top: 0;
+    bottom: 0;
+    width: 75% !important;
+    min-width: 0 !important;
+    max-width: 320px;
+    z-index: 55;
+    transition: right 0.2s ease;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+  }
+  .right-pane.open {
+    right: 0;
+    width: 75% !important;
+    min-width: 0 !important;
+    max-width: 320px;
+  }
+
+  /* Show toggle tab and close button on mobile */
+  .right-pane-toggle { display: block; }
+  .right-pane.open ~ .right-pane-toggle { display: none; }
+  .right-pane-close { display: block; }
+
+  /* Center pane always fills the screen */
+  .center-pane { width: 100%; }
+
+  /* Tighter padding on mobile */
+  .messages { padding: 12px 12px; }
+  .chat-header { padding: 8px 12px; }
+  .chat-form { padding: 8px 12px; }
+
+  /* Hide desktop canvas button, keep share/copy */
+  #artifact-btn { display: none; }
 }
 
 /* -- Market Map tabs -- */

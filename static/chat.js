@@ -426,13 +426,16 @@
     window.toggleArtifactPane = () => {
         const r = $("#right-pane");
         const app = $(".app");
+        const tog = $(".right-pane-toggle");
         if (!r) return;
         if (r.classList.contains("open")) {
             r.classList.remove("open");
             if (app) app.classList.add("pane-closed");
+            if (tog) tog.style.display = "";
         } else {
             r.classList.add("open");
             if (app) app.classList.remove("pane-closed");
+            if (tog) tog.style.display = "none";
         }
     };
     window.toggleGroup = (id) => {
