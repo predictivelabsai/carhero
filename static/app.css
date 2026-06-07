@@ -219,12 +219,19 @@
 
 .mobile-menu-btn {
   display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   background: none;
   border: none;
-  font-size: 18px;
   cursor: pointer;
   color: var(--ink);
+  border-radius: 8px;
+  flex-shrink: 0;
 }
+.mobile-menu-btn:hover { background: var(--bg-alt); }
 
 /* -- Messages -- */
 .messages {
@@ -656,40 +663,43 @@
 }
 
 /* -- Mobile -- */
-/* -- Right-pane toggle button (visible when pane closed) -- */
+/* -- Right-pane toggle button (visible when pane closed, mobile only) -- */
 .right-pane-toggle {
   display: none;
   position: fixed;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 48px;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-right: none;
-  border-radius: 6px 0 0 6px;
-  color: var(--ink-dim);
+  right: 12px;
+  bottom: 80px;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 24px;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   z-index: 30;
-  padding: 0;
-  line-height: 48px;
-  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
-.right-pane-toggle:hover { background: var(--border); color: var(--ink); }
+.right-pane-toggle:hover { background: var(--accent-hover); }
+.right-pane-toggle .toggle-label { font-size: 12px; }
 
 /* -- Right-pane close button (inside pane header) -- */
 .right-pane-close {
   display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   background: none;
   border: none;
   color: var(--ink-dim);
-  font-size: 13px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 0;
+  border-radius: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 .right-pane-close:hover { background: var(--bg-alt); color: var(--ink); }
 
@@ -703,32 +713,33 @@
     transition: left 0.2s ease;
   }
   .left-pane.open { left: 0; }
-  .mobile-menu-btn { display: block; }
+  .mobile-menu-btn { display: flex; }
 
-  /* Right pane: slide from right, never cover chat */
+  /* Right pane: slide from right */
   .right-pane {
     position: fixed;
     right: -100%;
     top: 0;
     bottom: 0;
-    width: 75% !important;
+    width: 85% !important;
     min-width: 0 !important;
-    max-width: 320px;
-    z-index: 55;
-    transition: right 0.2s ease;
-    box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+    max-width: 360px;
+    z-index: 60;
+    transition: right 0.25s ease;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.1);
   }
   .right-pane.open {
     right: 0;
-    width: 75% !important;
+    width: 85% !important;
     min-width: 0 !important;
-    max-width: 320px;
+    max-width: 360px;
   }
 
-  /* Show toggle tab and close button on mobile */
-  .right-pane-toggle { display: block; }
-  .right-pane.open ~ .right-pane-toggle { display: none; }
-  .right-pane-close { display: block; }
+  /* Show toggle FAB and close button on mobile */
+  .right-pane-toggle { display: none; }
+  .right-pane-toggle.has-results { display: flex; }
+  .right-pane.open ~ .right-pane-toggle { display: none !important; }
+  .right-pane-close { display: flex; }
 
   /* Center pane always fills the screen */
   .center-pane { width: 100%; }
@@ -736,7 +747,7 @@
   /* Tighter padding on mobile */
   .messages { padding: 12px 12px; }
   .chat-header { padding: 8px 12px; }
-  .chat-form { padding: 8px 12px; }
+  .chat-form { padding: 8px 12px 12px; }
 
   /* Hide desktop canvas button, keep share/copy */
   #artifact-btn { display: none; }

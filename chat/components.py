@@ -238,7 +238,7 @@ def center_pane(messages=None, current_agent_slug=None, lang: str = "en"):
     return Div(
         Div(
             Div(
-                Button("=", cls="mobile-menu-btn", onclick="toggleLeftPane()"),
+                Button(NotStr('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>'), cls="mobile-menu-btn", onclick="toggleLeftPane()"),
                 Span(header_title, id="current-agent-label", cls="chat-header-title"),
                 cls="chat-header-left",
             ),
@@ -294,7 +294,7 @@ def right_pane(lang: str = "en"):
                 H4(t("chat_artifacts_title", lang), cls="artifact-title"),
                 Span(t("chat_artifacts_subtitle", lang), id="artifact-subtitle", cls="artifact-subtitle"),
             ),
-            Button(">>", cls="right-pane-close", onclick="toggleArtifactPane()"),
+            Button(NotStr('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'), cls="right-pane-close", onclick="toggleArtifactPane()"),
             cls="artifact-header",
         ),
         Div(

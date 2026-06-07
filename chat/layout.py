@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fasthtml.common import (
     Html, Head, Body, Meta, Title, Link, Script, NotStr,
-    Div,
+    Div, Span,
 )
 
 from chat.components import left_pane, center_pane, right_pane, signin_overlay
@@ -57,7 +57,11 @@ def chat_page(user_email=None, sessions=None, current_sid="",
         left_pane(user_email=user_email, sessions=sessions, current_sid=current_sid, lang=lang),
         center_pane(messages=messages, current_agent_slug=current_agent_slug, lang=lang),
         right_pane(lang=lang),
-        Button("<<", cls="right-pane-toggle", onclick="toggleArtifactPane()", title="Open results"),
+        Button(
+            NotStr('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>'),
+            Span("Results", cls="toggle-label"),
+            id="right-pane-toggle-btn", cls="right-pane-toggle", onclick="toggleArtifactPane()",
+        ),
         Script(_json.dumps(js_translations(lang)), id="i18n-data", type="application/json"),
         Script(src="/static/chat.js"),
         cls="bg-white text-ink font-sans antialiased app",

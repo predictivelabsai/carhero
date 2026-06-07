@@ -325,13 +325,8 @@
             const ab = $("#artifact-btn");
             if (ab) ab.classList.add("active");
         } else {
-            // On mobile, just pulse the << toggle to hint results are ready
-            const tog = $(".right-pane-toggle");
-            if (tog) {
-                tog.style.background = "#000";
-                tog.style.color = "#fff";
-                setTimeout(() => { tog.style.background = ""; tog.style.color = ""; }, 2000);
-            }
+            const tog = $("#right-pane-toggle-btn");
+            if (tog) tog.classList.add("has-results");
         }
     }
 
@@ -437,16 +432,17 @@
     window.toggleArtifactPane = () => {
         const r = $("#right-pane");
         const app = $(".app");
-        const tog = $(".right-pane-toggle");
         if (!r) return;
         if (r.classList.contains("open")) {
             r.classList.remove("open");
             if (app) app.classList.add("pane-closed");
-            if (tog) tog.style.display = "";
+            const ab = $("#artifact-btn");
+            if (ab) ab.classList.remove("active");
         } else {
             r.classList.add("open");
             if (app) app.classList.remove("pane-closed");
-            if (tog) tog.style.display = "none";
+            const ab = $("#artifact-btn");
+            if (ab) ab.classList.add("active");
         }
     };
     window.toggleGroup = (id) => {
@@ -541,6 +537,14 @@
         const menu = document.getElementById("lang-dd-menu");
         if (menu) menu.classList.remove("open");
     });
+
+    // On mobile, ensure right pane starts closed
+    if (window.innerWidth <= 768) {
+        const rp = $("#right-pane");
+        if (rp) rp.classList.remove("open");
+        const app = $(".app");
+        if (app) app.classList.add("pane-closed");
+    }
 
     window.sendMessage = sendMessage;
     window.renderMarkdownLite = renderMarkdownLite;
