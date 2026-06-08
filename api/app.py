@@ -181,13 +181,14 @@ def create_app(root_path: str = "") -> FastAPI:
     @api.get("/sessions", response_model=list[SessionSummary], tags=["sessions"])
     def list_sessions(
         limit: int = 30,
-        user: dict = Depends(get_current_user),
+        user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
+        uid = user["sub"] if user else "guest"
         rows = db.execute(
             text(f"SELECT id, title, agent_slug, updated_at FROM {SCHEMA}.chat_sessions "
                  "WHERE user_id = :uid ORDER BY updated_at DESC LIMIT :lim"),
-            {"uid": user["user_id"], "lim": limit},
+            {"uid": uid, "lim": limit},
         ).fetchall()
         return [
             SessionSummary(id=r.id, title=r.title, agent_slug=r.agent_slug,
@@ -198,12 +199,13 @@ def create_app(root_path: str = "") -> FastAPI:
     @api.get("/sessions/{session_id}", response_model=SessionDetail, tags=["sessions"])
     def get_session(
         session_id: int,
-        user: dict = Depends(get_current_user),
+        user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
+        uid = user["sub"] if user else "guest"
         row = db.execute(
             text(f"SELECT id, title, agent_slug FROM {SCHEMA}.chat_sessions WHERE id = :sid AND user_id = :uid"),
-            {"sid": session_id, "uid": user["user_id"]},
+            {"sid": session_id, "uid": uid},
         ).fetchone()
         if not row:
             raise HTTPException(404, "Session not found")
@@ -221,12 +223,13 @@ def create_app(root_path: str = "") -> FastAPI:
     @api.delete("/sessions/{session_id}", tags=["sessions"])
     def delete_session(
         session_id: int,
-        user: dict = Depends(get_current_user),
+        user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
+        uid = user["sub"] if user else "guest"
         row = db.execute(
             text(f"SELECT id FROM {SCHEMA}.chat_sessions WHERE id = :sid AND user_id = :uid"),
-            {"sid": session_id, "uid": user["user_id"]},
+            {"sid": session_id, "uid": uid},
         ).fetchone()
         if not row:
             raise HTTPException(404, "Session not found")
@@ -239,12 +242,13 @@ def create_app(root_path: str = "") -> FastAPI:
     @api.post("/sessions/{session_id}/share", response_model=ShareResponse, tags=["sessions"])
     def share_session(
         session_id: int,
-        user: dict = Depends(get_current_user),
+        user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
+        uid = user["sub"] if user else "guest"
         row = db.execute(
             text(f"SELECT share_token FROM {SCHEMA}.chat_sessions WHERE id = :sid AND user_id = :uid"),
-            {"sid": session_id, "uid": user["user_id"]},
+            {"sid": session_id, "uid": uid},
         ).fetchone()
         if not row:
             raise HTTPException(404, "Session not found")
@@ -287,10 +291,10 @@ def create_app(root_path: str = "") -> FastAPI:
                                "description": "SSE stream of chat events"}})
     def chat(
         body: ChatRequest,
-        user: dict = Depends(get_current_user),
+        user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
-        uid = user["user_id"]
+        uid = user["sub"] if user else "guest"
 
         if body.session_id:
             row = db.execute(

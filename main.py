@@ -195,6 +195,8 @@ try:
     print("INFO:     Mobile API mounted at /api/v1 (docs: /api/v1/docs)")
 except ImportError:
     print("INFO:     FastAPI not installed — mobile API disabled (monolith mode)")
+except Exception as e:
+    print(f"ERROR:    Failed to mount mobile API: {e}")
 
 
 # --- Initialize DB on startup ---
