@@ -184,7 +184,7 @@ def create_app(root_path: str = "") -> FastAPI:
         user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
-        uid = user["sub"] if user else "guest"
+        uid = user["sub"] if user else 0
         rows = db.execute(
             text(f"SELECT id, title, agent_slug, updated_at FROM {SCHEMA}.chat_sessions "
                  "WHERE user_id = :uid ORDER BY updated_at DESC LIMIT :lim"),
@@ -202,7 +202,7 @@ def create_app(root_path: str = "") -> FastAPI:
         user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
-        uid = user["sub"] if user else "guest"
+        uid = user["sub"] if user else 0
         row = db.execute(
             text(f"SELECT id, title, agent_slug FROM {SCHEMA}.chat_sessions WHERE id = :sid AND user_id = :uid"),
             {"sid": session_id, "uid": uid},
@@ -226,7 +226,7 @@ def create_app(root_path: str = "") -> FastAPI:
         user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
-        uid = user["sub"] if user else "guest"
+        uid = user["sub"] if user else 0
         row = db.execute(
             text(f"SELECT id FROM {SCHEMA}.chat_sessions WHERE id = :sid AND user_id = :uid"),
             {"sid": session_id, "uid": uid},
@@ -245,7 +245,7 @@ def create_app(root_path: str = "") -> FastAPI:
         user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
-        uid = user["sub"] if user else "guest"
+        uid = user["sub"] if user else 0
         row = db.execute(
             text(f"SELECT share_token FROM {SCHEMA}.chat_sessions WHERE id = :sid AND user_id = :uid"),
             {"sid": session_id, "uid": uid},
@@ -294,7 +294,7 @@ def create_app(root_path: str = "") -> FastAPI:
         user: dict | None = Depends(get_optional_user),
         db: Session = Depends(get_db),
     ):
-        uid = user["sub"] if user else "guest"
+        uid = user["sub"] if user else 0
 
         if body.session_id:
             row = db.execute(

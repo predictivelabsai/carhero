@@ -92,6 +92,13 @@ def _init_chat_tables():
                 conn.execute(text(stmt))
             except Exception:
                 pass
+        # Ensure guest user (id=0) exists for unauthenticated mobile API access
+        exists = conn.execute(text(f"SELECT 1 FROM {SCHEMA}.chat_users WHERE id = 0")).fetchone()
+        if not exists:
+            conn.execute(text(
+                f"INSERT INTO {SCHEMA}.chat_users (id, email, name, password_hash) "
+                f"VALUES (0, 'guest@carhero.chat', 'Guest', 'nologin')"
+            ))
         conn.commit()
 
 
