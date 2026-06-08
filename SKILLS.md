@@ -629,6 +629,19 @@ flutter run
 flutter test
 ```
 
+### Test → Fix → Redeploy workflow
+
+1. **Test on device** — install via Firebase App Tester, check all screens
+2. **Fix bugs locally** — edit Flutter code in `../carhero-mobile/`, backend in `api/app.py`
+3. **Run tests** — `flutter test` (294 tests), verify `flutter analyze` passes
+4. **Push backend** — `git push` in carhero repo triggers Coolify deploy via `.github/workflows/deploy.yml`
+5. **Verify API** — `curl https://carhero.chat/api-status` should return `{"mounted": true}`
+6. **Push Flutter** — `git push` in carhero-mobile triggers CI: analyze → test → build APK → Firebase App Distribution
+7. **Verify CI** — `gh run list --repo predictivelabsai/carhero-mobile --limit 1`
+8. **Test on device** — email arrives from Firebase, install updated APK, repeat from step 1
+
+Backend deploy uses GitHub Actions + Coolify (secrets: `COOLIFY_TOKEN`, `COOLIFY_WEBHOOK_URL`). Flutter deploy uses GitHub Actions + Firebase App Distribution (secrets: `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_APP_ID`).
+
 ### Shared session endpoint
 
 The API exposes `GET /shared/{token}` (public, no auth) for viewing shared chat sessions in the mobile app. Added to `api/app.py` alongside existing endpoints.
