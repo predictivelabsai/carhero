@@ -560,3 +560,75 @@ m.logout()
 | LiquidRound | 10 companies (Tavily + LLM) | Investment theses | Featured deep dive | — |
 
 CarHero's digest is freshness-driven (DB-only, no LLM, 36h window). Kanvas uses date-seeded shuffling for variety. LiquidRound uses Tavily + LLM to generate fresh research each day.
+
+---
+
+## 11. Mobile App (Flutter)
+
+### Overview
+
+Flutter mobile app at `../carhero-mobile/`. Replicates the CarHero web app for Android (iOS deferred). Connects to the same FastAPI backend at `/api/v1`.
+
+### Tech stack
+
+| Layer | Choice |
+|-------|--------|
+| Framework | Flutter 3.44+ / Dart 3.12+ |
+| State management | Riverpod 3 |
+| Routing | GoRouter 17 |
+| HTTP | Dio (REST) + http (SSE streaming) |
+| Charts | fl_chart |
+| Auth | JWT Bearer + Google Sign-In v7 |
+| i18n | Flutter Localizations (ARB, 12 languages) |
+| CI/CD | GitHub Actions + Firebase App Distribution |
+
+### GCP / Firebase setup
+
+| Resource | Value |
+|----------|-------|
+| GCP Project | `carhero-mobile` (project number: 698790728504) |
+| Firebase App ID | `1:698790728504:android:9dfa8be9906dacc8b9a7cd` |
+| Package name | `chat.carhero.carhero` |
+| Google OAuth Web Client ID | `76656799510-2996ug4uc4743ht74g4hsopn61g71ien.apps.googleusercontent.com` |
+| Google OAuth Android Client ID | `76656799510-99q9f28jc0494atvgmjirppeuk2mfe8l.apps.googleusercontent.com` |
+| OAuth project | `finespresso` (shared with web app) |
+| Firebase service account | `firebase-app-dist@carhero-mobile.iam.gserviceaccount.com` |
+
+### CI/CD pipeline
+
+GitHub Actions (`.github/workflows/ci.yml`) on every push to `main`:
+1. **Analyze** — `dart format --set-exit-if-changed` + `flutter analyze`
+2. **Test** — `flutter test --coverage` (294 tests)
+3. **Build** — `flutter build apk --release` + `flutter build appbundle --release`
+4. **Distribute** — APK uploaded to Firebase App Distribution (testers group)
+
+### GitHub secrets (carhero-mobile repo)
+
+| Secret | Purpose |
+|--------|---------|
+| `FIREBASE_SERVICE_ACCOUNT` | Service account JSON for Firebase uploads |
+| `FIREBASE_APP_ID` | `1:698790728504:android:9dfa8be9906dacc8b9a7cd` |
+| `KEYSTORE_BASE64` | Base64-encoded release keystore (optional) |
+| `KEY_ALIAS` | Keystore key alias |
+| `KEY_PASSWORD` | Keystore key password |
+| `STORE_PASSWORD` | Keystore store password |
+
+### Install test builds
+
+1. Install **Firebase App Tester** from Google Play Store
+2. Sign in with Google account (must be in `testers` group)
+3. Download latest build
+
+### Build commands (local dev)
+
+```bash
+cd ../carhero-mobile
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+flutter run
+flutter test
+```
+
+### Shared session endpoint
+
+The API exposes `GET /shared/{token}` (public, no auth) for viewing shared chat sessions in the mobile app. Added to `api/app.py` alongside existing endpoints.
