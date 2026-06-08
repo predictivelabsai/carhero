@@ -185,8 +185,15 @@ _MOBILE_CSS = """<style>
     .scan-filters-grid {
         grid-template-columns: 1fr 1fr;
     }
+    .scan-filters-grid button {
+        grid-column: 1 / -1;
+    }
     .scan-card-prices {
         flex-direction: column;
+    }
+    .scan-card-header {
+        flex-direction: column;
+        gap: 4px;
     }
     .scan-drop-card {
         flex-direction: column;
