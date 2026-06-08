@@ -379,8 +379,10 @@
                 const extra = [l.power_hp ? l.power_hp + "hp" : "", l.body_type, l.steering_side === "RHD" ? "RHD" : ""].filter(Boolean).join(" · ");
                 const scoreBadge = l.investment_score ? `<span class="listing-score tier-${l.tier||3}">${l.investment_score}</span>` : "";
                 const favBtn = l.id ? `<button class="fav-btn" onclick="toggleFavorite(${l.id},this)" title="Save to favorites">&#9825;</button>` : "";
+                const img = l.image_url ? `<img src="${l.image_url}" alt="${l.make} ${l.model}" class="listing-thumb" loading="lazy" onerror="this.style.display='none'">` : "";
                 return `
                 <div class="listing-card">
+                    ${img}
                     <div class="listing-header">
                         <span class="listing-title">${l.make} ${l.model}</span>
                         <span style="display:flex;align-items:center;gap:6px;">${scoreBadge}<span class="listing-price">${fmtPrice(l.price_eur)}</span>${favBtn}</span>
@@ -428,6 +430,14 @@
         const lo = $(".left-overlay");
         if (lp) lp.classList.toggle("open");
         if (lo) lo.classList.toggle("visible");
+        const rp = $("#right-pane");
+        if (rp && rp.classList.contains("open")) {
+            rp.classList.remove("open");
+            const ro = $("#right-overlay");
+            if (ro) ro.classList.remove("visible");
+            const app = $(".app");
+            if (app) app.classList.add("pane-closed");
+        }
     };
     window.toggleArtifactPane = () => {
         const r = $("#right-pane");

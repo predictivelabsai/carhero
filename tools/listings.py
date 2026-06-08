@@ -28,6 +28,17 @@ PROVIDER_LABELS = {
 }
 
 
+def _first_image(image_urls):
+    if isinstance(image_urls, str):
+        try:
+            image_urls = json.loads(image_urls)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if isinstance(image_urls, list) and image_urls:
+        return image_urls[0]
+    return ""
+
+
 class SearchListingsArgs(BaseModel):
     make: Optional[str] = Field(default=None, description="Car make, e.g. BMW, Audi, Porsche")
     model: Optional[str] = Field(default=None, description="Car model, e.g. X5, A4, 911")
@@ -98,7 +109,7 @@ def _search_listings(**kw) -> str:
         rows = db.execute(text(f"""
             SELECT id, make, model, variant, year, mileage_km, price_eur, currency,
                    fuel_type, transmission, body_type, power_hp, country, city,
-                   provider, source_url, steering_side, condition
+                   provider, source_url, steering_side, condition, image_urls
             FROM carhero.car_listings
             WHERE {where}
             ORDER BY price_eur ASC NULLS LAST
@@ -141,6 +152,7 @@ def _search_listings(**kw) -> str:
             "steering_side": m.get("steering_side") or "",
             "condition": m.get("condition") or "",
             "url": m.get("source_url") or "",
+            "image_url": _first_image(m.get("image_urls")),
         })
 
     label = " ".join(filter(None, [args.make, args.model]))

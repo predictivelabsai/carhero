@@ -672,6 +672,14 @@
 .listing-link:hover {
   text-decoration: underline;
 }
+.listing-thumb {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: var(--bg-alt);
+}
 
 /* -- Mobile -- */
 /* -- Right-pane toggle button (visible when pane closed, mobile only) -- */
@@ -757,7 +765,7 @@
 
   /* Tighter padding on mobile */
   .messages { padding: 12px 12px; }
-  .chat-header { padding: 8px 12px; }
+  .chat-header { padding: 8px 12px; position: relative; z-index: 61; }
   .chat-form { padding: 8px 12px 12px; }
 
   /* Hide desktop canvas button, keep share/copy */

@@ -11,6 +11,18 @@ from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
 
+
+def _first_image(image_urls):
+    if isinstance(image_urls, str):
+        try:
+            image_urls = json.loads(image_urls)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if isinstance(image_urls, list) and image_urls:
+        return image_urls[0]
+    return ""
+
+
 COUNTRY_LABELS = {
     "GB": "UK", "DE": "Germany", "EU": "Other EU",
     "EE": "Estonia", "LT": "Lithuania", "LV": "Latvia", "SE": "Sweden",
@@ -81,7 +93,7 @@ def _get_investment_scores(**kw) -> str:
         rows = db.execute(text(f"""
             SELECT cl.id, cl.make, cl.model, cl.variant, cl.year, cl.mileage_km,
                    cl.price_eur, cl.fuel_type, cl.transmission, cl.body_type,
-                   cl.power_hp, cl.country, cl.provider, cl.source_url,
+                   cl.power_hp, cl.country, cl.provider, cl.source_url, cl.image_urls,
                    s.score, s.tier, s.percentile, s.strength_summary,
                    s.price_score, s.mileage_score, s.depreciation_score,
                    s.scarcity_score, s.config_score
@@ -131,6 +143,7 @@ def _get_investment_scores(**kw) -> str:
             "provider": m.get("provider") or "",
             "provider_label": PROVIDER_LABELS.get(m.get("provider", ""), ""),
             "url": m.get("source_url") or "",
+            "image_url": _first_image(m.get("image_urls")),
             "investment_score": m["score"],
             "tier": m["tier"],
             "tier_label": TIER_LABELS.get(m["tier"], ""),
