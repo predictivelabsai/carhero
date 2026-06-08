@@ -76,6 +76,9 @@ register_favorites_routes(rt)
 from chat.garage import register_garage_routes
 register_garage_routes(rt)
 
+from chat.daily_scan import register_daily_scan_routes
+register_daily_scan_routes(rt)
+
 
 # --- Scraper + Daily digest scheduler ---
 

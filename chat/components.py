@@ -190,6 +190,7 @@ def left_pane(user_email=None, sessions=None, current_sid="", lang: str = "en"):
             H4(t("chat_agents", lang), cls="section-label"),
             *agent_groups,
             H4("Workspace", cls="section-label"),
+            A("Daily Scan", href="/app/daily-scan", cls="workspace-link"),
             A("Market Map", href="/app/market-map", cls="workspace-link"),
             A("Favorites", href="/app/favorites", cls="workspace-link"),
             A("Saved Searches", href="/app/saved-searches", cls="workspace-link"),
