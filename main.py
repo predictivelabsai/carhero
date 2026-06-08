@@ -189,14 +189,22 @@ def _start_scrape_and_digest():
 
 # --- Mount FastAPI mobile API at /api/v1 (optional) ---
 
+_api_status = {"mounted": False, "error": None}
 try:
     from api.app import api_router
     app.mount("/api/v1", api_router)
+    _api_status["mounted"] = True
     print("INFO:     Mobile API mounted at /api/v1 (docs: /api/v1/docs)")
-except ImportError:
+except ImportError as e:
+    _api_status["error"] = f"ImportError: {e}"
     print("INFO:     FastAPI not installed — mobile API disabled (monolith mode)")
 except Exception as e:
+    _api_status["error"] = f"{type(e).__name__}: {e}"
     print(f"ERROR:    Failed to mount mobile API: {e}")
+
+@rt("/api-status")
+def api_status():
+    return _JSONResponse(_api_status)
 
 
 # --- Initialize DB on startup ---
