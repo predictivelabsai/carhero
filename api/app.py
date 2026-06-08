@@ -963,6 +963,34 @@ def create_app(root_path: str = "") -> FastAPI:
             rows=len(df),
         )
 
+    # ── Daily Scan ───────────────────────────────────────────────────
+
+    @api.get("/daily-scan", tags=["daily-scan"])
+    def daily_scan():
+        from decimal import Decimal
+        from utils.deals_scanner import (
+            scan_price_comparisons, scan_price_drops, scan_freshness_stats,
+        )
+
+        stats = scan_freshness_stats()
+        comparisons = scan_price_comparisons(limit=100)
+        price_drops = scan_price_drops(limit=15)
+
+        def _default(o):
+            if isinstance(o, Decimal):
+                return float(o)
+            if hasattr(o, 'isoformat'):
+                return o.isoformat()
+            raise TypeError
+
+        raw = json.loads(json.dumps({
+            "stats": stats,
+            "comparisons": comparisons,
+            "price_drops": price_drops,
+        }, default=_default))
+
+        return raw
+
     # ── Contact ──────────────────────────────────────────────────────
 
     @api.post("/contact", tags=["contact"])
