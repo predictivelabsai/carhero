@@ -1,14 +1,13 @@
-"""Send CarHero car deals digest email via Postmark.
+"""Send CarHero daily deals digest email via Postmark.
 
 Usage:
     python -m scripts.daily_deals                       # uses env defaults
     python -m scripts.daily_deals --to user@example.com
-    python -m scripts.daily_deals --dry-run              # print HTML, don't send
+    python -m scripts.daily_deals --all                 # send to all opted-in users
+    python -m scripts.daily_deals --dry-run             # print HTML, don't send
 
-Schedule via cron (3x daily at 07:00, 13:00, 19:00 UTC):
-    0 7 * * *  cd /path/to/carhero && python -m scripts.daily_deals
-    0 13 * * * cd /path/to/carhero && python -m scripts.daily_deals
-    0 19 * * * cd /path/to/carhero && python -m scripts.daily_deals
+The digest is designed to run after the nightly scrape finishes, so all
+sections draw from freshly scraped data (default: last 36 hours).
 """
 from __future__ import annotations
 
@@ -25,8 +24,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from utils.deals_scanner import (
-    scan_deals, scan_lowest_prices,
-    build_digest_html, build_digest_text,
+    scan_deals, scan_lowest_prices, scan_new_listings, scan_price_drops,
+    scan_freshness_stats, build_digest_html, build_digest_text,
 )
 from utils.email import send_email
 
@@ -64,35 +63,48 @@ def main():
     parser.add_argument("--all", action="store_true", help="Send to all registered users with digest enabled")
     parser.add_argument("--deals", type=int, default=15, help="Number of top deals")
     parser.add_argument("--cheapest", type=int, default=10, help="Number of cheapest listings")
+    parser.add_argument("--new", type=int, default=10, help="Number of new listings")
+    parser.add_argument("--drops", type=int, default=10, help="Number of price drops")
     args = parser.parse_args()
 
-    log.info("Scanning price deals...")
+    log.info("Scanning freshness stats...")
+    stats = scan_freshness_stats()
+    log.info("Stats: %s", stats)
+
+    log.info("Scanning new listings...")
+    new_listings = scan_new_listings(limit=args.new)
+    log.info("Found %d new listings", len(new_listings))
+
+    log.info("Scanning price drops...")
+    price_drops = scan_price_drops(limit=args.drops)
+    log.info("Found %d price drops", len(price_drops))
+
+    log.info("Scanning price arbitrage deals...")
     deals = scan_deals(limit=args.deals)
-    log.info(f"Found {len(deals)} deals with price spread")
+    log.info("Found %d deals with price spread", len(deals))
 
     log.info("Scanning lowest prices...")
     cheapest = scan_lowest_prices(limit=args.cheapest)
-    log.info(f"Found {len(cheapest)} cheapest listings")
+    log.info("Found %d cheapest listings", len(cheapest))
 
-    html = build_digest_html(deals, cheapest)
-    text = build_digest_text(deals, cheapest)
+    html = build_digest_html(deals, cheapest, new_listings, price_drops, stats)
+    text = build_digest_text(deals, cheapest, new_listings, price_drops, stats)
 
     now = datetime.now()
-    period = "Morning" if now.hour < 12 else ("Afternoon" if now.hour < 17 else "Evening")
-    subject = f"CarHero {period} Deals -- {now.strftime('%b %d, %Y')}"
+    subject = f"CarHero Daily Deals — {now.strftime('%b %d, %Y')}"
 
     if args.dry_run:
         print(html)
-        log.info(f"Dry run complete. Subject: {subject}")
+        log.info("Dry run complete. Subject: %s", subject)
         return
 
     recipients = _get_recipients(args)
-    log.info(f"Sending digest to {len(recipients)} recipient(s) from {args.from_email}...")
+    log.info("Sending digest to %d recipient(s) from %s...", len(recipients), args.from_email)
 
     sent, failed = 0, 0
-    for email in recipients:
+    for addr in recipients:
         result = send_email(
-            to=email,
+            to=addr,
             subject=subject,
             html_body=html,
             text_body=text,
@@ -100,13 +112,13 @@ def main():
             tag="car-deals",
         )
         if result.get("ErrorCode") == 0:
-            log.info(f"Sent to {email} (MessageID: {result.get('MessageID')})")
+            log.info("Sent to %s (MessageID: %s)", addr, result.get("MessageID"))
             sent += 1
         else:
-            log.error(f"Failed for {email}: {result}")
+            log.error("Failed for %s: %s", addr, result)
             failed += 1
 
-    log.info(f"Digest complete: {sent} sent, {failed} failed")
+    log.info("Digest complete: %d sent, %d failed", sent, failed)
 
 
 if __name__ == "__main__":

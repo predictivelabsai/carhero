@@ -1,8 +1,8 @@
-"""Car Deals Scanner -- finds price arbitrage opportunities across providers/countries.
+"""Car Deals Scanner -- finds fresh daily deals from the latest scrape run.
 
-A "deal" = same make + model listed at significantly different prices across
-different providers or countries. Buyers can save by purchasing from the
-cheaper source.
+The digest is meaningful only when scrapers run nightly and load fresh data.
+Each scan function uses a freshness window (default 36h) so the digest
+reflects what changed in the most recent scrape cycle.
 """
 from __future__ import annotations
 
@@ -15,9 +15,14 @@ log = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("SERVICE_URL_CARHERO", "https://carhero.chat")
 
+FRESHNESS_HOURS = int(os.getenv("DIGEST_FRESHNESS_HOURS", "36"))
+
 COUNTRY_LABELS = {
     "GB": "UK", "DE": "Germany", "EU": "Other EU",
     "EE": "Estonia", "LT": "Lithuania", "LV": "Latvia", "SE": "Sweden",
+    "PL": "Poland", "ES": "Spain", "NL": "Netherlands", "FI": "Finland",
+    "DK": "Denmark", "IE": "Ireland", "NO": "Norway", "PT": "Portugal",
+    "RO": "Romania",
 }
 PROVIDER_LABELS = {
     "autotrader": "AutoTrader",
@@ -29,22 +34,91 @@ PROVIDER_LABELS = {
     "auto24_lt": "Auto24.lt",
     "auto24_lv": "Auto24.lv",
     "blocket": "Blocket.se",
+    "otomoto": "Otomoto.pl",
+    "coches": "Coches.net",
+    "marktplaats": "Marktplaats.nl",
+    "nettiauto": "Nettiauto.com",
+    "bilbasen": "Bilbasen.dk",
+    "donedeal": "DoneDeal.ie",
+    "finn": "Finn.no",
+    "standvirtual": "Standvirtual.com",
+    "autovit": "Autovit.ro",
 }
 
 
-def scan_deals(limit: int = 15) -> list[dict]:
-    """Find make/model combos with the biggest price spread across providers or countries.
-
-    Each deal is upserted into the deals table and gets a stable UUID.
-    Returns rows with: deal_id, make, model, min_price, max_price, avg_price,
-    savings_eur, savings_pct, cheapest_source, priciest_source, listing_count.
-    """
+def scan_new_listings(limit: int = 10) -> list[dict]:
+    """Listings first seen in the latest scrape (created_at within freshness window)."""
     from db import SessionLocal
     from sqlalchemy import text
 
     db = SessionLocal()
     try:
         sql = text("""
+            SELECT make, model, variant, year, mileage_km, price_eur,
+                   country, provider, fuel_type, transmission, source_url
+            FROM carhero.car_listings
+            WHERE status = 'active' AND price_eur > 0
+              AND created_at > NOW() - MAKE_INTERVAL(hours => :hours)
+            ORDER BY md5(make || model || CURRENT_DATE::text), price_eur ASC
+            LIMIT :lim
+        """)
+        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit, "hours": FRESHNESS_HOURS})]
+    finally:
+        db.close()
+
+
+def scan_price_drops(limit: int = 10) -> list[dict]:
+    """Listings whose price dropped in the latest scrape vs their previous price."""
+    from db import SessionLocal
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        sql = text("""
+            SELECT l.make, l.model, l.variant, l.year, l.mileage_km,
+                   l.price_eur, l.country, l.provider, l.fuel_type,
+                   l.transmission, l.source_url,
+                   ph.price_eur AS old_price,
+                   (ph.price_eur - l.price_eur) AS drop_eur,
+                   ROUND(((ph.price_eur - l.price_eur) / ph.price_eur * 100)::numeric, 1) AS drop_pct
+            FROM carhero.car_listings l
+            JOIN carhero.price_history ph ON ph.listing_id = l.id
+            WHERE l.status = 'active' AND l.price_eur > 0
+              AND ph.recorded_at > NOW() - MAKE_INTERVAL(hours => :hours)
+              AND ph.price_eur > l.price_eur
+            ORDER BY (ph.price_eur - l.price_eur)::float / ph.price_eur DESC
+            LIMIT :lim
+        """)
+        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit, "hours": FRESHNESS_HOURS})]
+    finally:
+        db.close()
+
+
+def scan_deals(limit: int = 15) -> list[dict]:
+    """Price arbitrage: same make/model with biggest spread across sources.
+
+    Uses freshly scraped listings only. Falls back to all active listings
+    if the fresh window has too few (< 1000 listings).
+    """
+    from db import SessionLocal
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        fresh_count = db.execute(text("""
+            SELECT COUNT(*) FROM carhero.car_listings
+            WHERE status = 'active' AND price_eur > 0
+              AND scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
+        """), {"hours": FRESHNESS_HOURS}).scalar()
+
+        freshness_filter = (
+            "AND scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)"
+            if fresh_count >= 1000 else ""
+        )
+        if fresh_count < 1000:
+            log.info("Only %d fresh listings, using full catalog for deals", fresh_count)
+
+        sql = text(f"""
             WITH by_source AS (
                 SELECT make, model, country, provider,
                        COUNT(*) AS cnt,
@@ -53,6 +127,7 @@ def scan_deals(limit: int = 15) -> list[dict]:
                        ROUND(MAX(price_eur)::numeric, 0) AS max_price
                 FROM carhero.car_listings
                 WHERE status = 'active' AND price_eur > 0
+                  {freshness_filter}
                 GROUP BY make, model, country, provider
                 HAVING COUNT(*) >= 1
             ),
@@ -74,7 +149,8 @@ def scan_deals(limit: int = 15) -> list[dict]:
             ORDER BY savings_pct DESC
             LIMIT :lim
         """)
-        rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
+        params = {"lim": limit, "hours": FRESHNESS_HOURS}
+        rows = [dict(r._mapping) for r in db.execute(sql, params)]
 
         for row in rows:
             cheapest = db.execute(text("""
@@ -149,7 +225,7 @@ def scan_deals(limit: int = 15) -> list[dict]:
 
 
 def scan_lowest_prices(limit: int = 10) -> list[dict]:
-    """Pull the cheapest active listings overall."""
+    """Cheapest active listings from the latest scrape."""
     from db import SessionLocal
     from sqlalchemy import text
 
@@ -157,22 +233,68 @@ def scan_lowest_prices(limit: int = 10) -> list[dict]:
     try:
         sql = text("""
             SELECT make, model, variant, year, mileage_km, price_eur,
-                   country, provider, fuel_type, transmission
+                   country, provider, fuel_type, transmission, source_url
             FROM carhero.car_listings
             WHERE status = 'active' AND price_eur > 0
+              AND scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
             ORDER BY price_eur ASC
             LIMIT :lim
         """)
-        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
+        rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit, "hours": FRESHNESS_HOURS})]
+        if not rows:
+            log.info("No fresh cheapest listings, falling back to all active")
+            sql = text("""
+                SELECT make, model, variant, year, mileage_km, price_eur,
+                       country, provider, fuel_type, transmission, source_url
+                FROM carhero.car_listings
+                WHERE status = 'active' AND price_eur > 0
+                ORDER BY price_eur ASC
+                LIMIT :lim
+            """)
+            rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
+        return rows
     finally:
         db.close()
+
+
+def scan_freshness_stats() -> dict:
+    """Summary stats for the digest header."""
+    from db import SessionLocal
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        row = db.execute(text("""
+            SELECT
+                COUNT(*) AS total_active,
+                COUNT(*) FILTER (
+                    WHERE scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
+                ) AS fresh_count,
+                COUNT(*) FILTER (
+                    WHERE created_at > NOW() - MAKE_INTERVAL(hours => :hours)
+                ) AS new_count,
+                COUNT(DISTINCT provider) FILTER (
+                    WHERE scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
+                ) AS providers_scraped,
+                COUNT(DISTINCT country) FILTER (
+                    WHERE scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
+                ) AS countries_covered
+            FROM carhero.car_listings
+            WHERE status = 'active'
+        """), {"hours": FRESHNESS_HOURS}).first()
+        return dict(row._mapping) if row else {}
+    finally:
+        db.close()
+
+
+# ── Formatting helpers ────────────────────────────────────────────────
 
 
 def _fmt_eur(n) -> str:
     if not n:
         return "--"
     try:
-        return f"EUR {float(n):,.0f}"
+        return f"€{float(n):,.0f}"
     except (TypeError, ValueError):
         return str(n)
 
@@ -183,13 +305,129 @@ def _source_label(country: str | None, provider: str | None) -> str:
     return f"{c} / {p}"
 
 
-def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
+# ── HTML builder ──────────────────────────────────────────────────────
+
+
+def build_digest_html(
+    deals: list[dict],
+    cheapest: list[dict],
+    new_listings: list[dict] | None = None,
+    price_drops: list[dict] | None = None,
+    stats: dict | None = None,
+) -> str:
     now = datetime.now()
     today = now.strftime("%A, %B %d, %Y")
-    period = "Morning" if now.hour < 12 else ("Afternoon" if now.hour < 17 else "Evening")
 
-    deal_rows = ""
+    stats = stats or {}
+    fresh = stats.get("fresh_count", 0)
+    new = stats.get("new_count", 0)
+    providers = stats.get("providers_scraped", 0)
+    countries = stats.get("countries_covered", 0)
+
     link_style = "color:inherit; text-decoration:none;"
+
+    # --- Stats banner ---
+    stats_html = ""
+    if fresh > 0:
+        stats_html = f"""
+    <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:12px 16px; margin-bottom:20px; text-align:center;">
+        <span style="font-size:13px; color:#15803D;">
+            <strong>{fresh:,}</strong> listings refreshed &middot;
+            <strong>{new:,}</strong> new today &middot;
+            <strong>{providers}</strong> providers &middot;
+            <strong>{countries}</strong> countries
+        </span>
+    </div>"""
+
+    # --- New listings section ---
+    new_html = ""
+    if new_listings:
+        rows_html = ""
+        for c in new_listings:
+            km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else "--"
+            src = _source_label(c.get("country"), c.get("provider"))
+            deal_url = f"{BASE_URL}/app?deal={quote(c['make'] + ' ' + c['model'])}"
+            rows_html += f"""
+            <tr>
+                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB;">
+                    <a href="{deal_url}" style="{link_style}">
+                        <strong>{c['make']} {c['model']}</strong>
+                        <span style="color:#6B7280; font-size:12px;">
+                            {c.get('variant') or ''} &middot; {c.get('year') or ''} &middot; {km}
+                        </span>
+                    </a>
+                </td>
+                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
+                    <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px; font-weight:600; color:#1A1A1A;">
+                        {_fmt_eur(c.get('price_eur'))}
+                    </a>
+                </td>
+                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
+                    <a href="{deal_url}" style="{link_style} font-size:11px; color:#6B7280;">{src}</a>
+                </td>
+            </tr>"""
+
+        new_html = f"""
+    <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
+        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #16A34A; padding-bottom:6px;">
+            &#x1F195; New Listings Today
+        </h2>
+        <p style="color:#6B7280; font-size:12px; margin:0 0 12px;">
+            Just appeared across European markets.
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
+            <tbody>{rows_html}</tbody>
+        </table>
+    </div>"""
+
+    # --- Price drops section ---
+    drops_html = ""
+    if price_drops:
+        rows_html = ""
+        for d in price_drops:
+            km = f"{int(d['mileage_km']):,} km" if d.get("mileage_km") else "--"
+            src = _source_label(d.get("country"), d.get("provider"))
+            deal_url = f"{BASE_URL}/app?deal={quote(d['make'] + ' ' + d['model'])}"
+            drop_pct = float(d.get("drop_pct") or 0)
+            rows_html += f"""
+            <tr>
+                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB;">
+                    <a href="{deal_url}" style="{link_style}">
+                        <strong>{d['make']} {d['model']}</strong>
+                        <span style="color:#6B7280; font-size:12px;">
+                            {d.get('variant') or ''} &middot; {d.get('year') or ''} &middot; {km}
+                        </span>
+                    </a>
+                </td>
+                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
+                    <span style="text-decoration:line-through; color:#9CA3AF; font-size:11px;">{_fmt_eur(d.get('old_price'))}</span><br>
+                    <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px; font-weight:600; color:#16A34A;">
+                        {_fmt_eur(d.get('price_eur'))}
+                    </a>
+                </td>
+                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:center;">
+                    <span style="background:#16A34A; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">
+                        &darr;{drop_pct:.0f}%
+                    </span><br>
+                    <span style="font-size:11px; color:#6B7280;">{src}</span>
+                </td>
+            </tr>"""
+
+        drops_html = f"""
+    <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
+        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #F59E0B; padding-bottom:6px;">
+            &#x1F4C9; Price Drops
+        </h2>
+        <p style="color:#6B7280; font-size:12px; margin:0 0 12px;">
+            Prices reduced since last scrape &mdash; sellers are getting motivated.
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
+            <tbody>{rows_html}</tbody>
+        </table>
+    </div>"""
+
+    # --- Top deals section ---
+    deal_rows = ""
     for d in deals:
         savings_pct = float(d.get("savings_pct") or 0)
         badge_color = "#16A34A" if savings_pct >= 15 else "#F59E0B" if savings_pct >= 8 else "#6B7280"
@@ -229,6 +467,7 @@ def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
             </td>
         </tr>"""
 
+    # --- Cheapest listings section ---
     cheapest_rows = ""
     for c in cheapest:
         km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else "--"
@@ -240,7 +479,7 @@ def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
                 <a href="{deal_url}" style="{link_style}">
                     <strong>{c['make']} {c['model']}</strong>
                     <span style="color:#6B7280; font-size:12px;">
-                        {c.get('variant') or ''} · {c.get('year') or ''} · {km}
+                        {c.get('variant') or ''} &middot; {c.get('year') or ''} &middot; {km}
                     </span>
                 </a>
             </td>
@@ -265,20 +504,23 @@ def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
     <!-- Header -->
     <div style="text-align:center; padding:20px 0 24px;">
         <h1 style="color:#1A1A1A; font-size:22px; font-weight:700; margin:0; letter-spacing:-0.02em;">
-            Car<span style="color:#000000;">Hero</span>
+            Car<span style="color:#6B7280;">Hero</span>
         </h1>
-        <p style="color:#6B7280; font-size:14px; margin:6px 0 0;">{period} Deals &middot; {today}</p>
-        <p style="color:#9CA3AF; font-size:12px; margin:4px 0 0;">Price arbitrage across European car markets</p>
+        <p style="color:#6B7280; font-size:14px; margin:6px 0 0;">Daily Deals &middot; {today}</p>
+        <p style="color:#9CA3AF; font-size:12px; margin:4px 0 0;">Fresh picks from overnight European market scan</p>
     </div>
+
+    {stats_html}
+    {new_html}
+    {drops_html}
 
     <!-- Top Deals -->
     <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
         <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #000000; padding-bottom:6px;">
-            Top Price Deals
+            &#x1F4B0; Best Price Arbitrage
         </h2>
         <p style="color:#6B7280; font-size:12px; margin:0 0 12px;">
             Same make &amp; model, different prices across countries and providers.
-            Buy from the cheapest source and save.
         </p>
         <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
             <thead>
@@ -298,7 +540,7 @@ def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
     <!-- Cheapest Listings -->
     <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
         <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #000000; padding-bottom:6px;">
-            Lowest Prices Right Now
+            &#x1F3F7; Lowest Prices Right Now
         </h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
             <tbody>
@@ -324,14 +566,45 @@ def build_digest_html(deals: list[dict], cheapest: list[dict]) -> str:
 </html>"""
 
 
-def build_digest_text(deals: list[dict], cheapest: list[dict]) -> str:
+def build_digest_text(
+    deals: list[dict],
+    cheapest: list[dict],
+    new_listings: list[dict] | None = None,
+    price_drops: list[dict] | None = None,
+    stats: dict | None = None,
+) -> str:
     now = datetime.now()
     today = now.strftime("%A, %B %d, %Y")
-    period = "Morning" if now.hour < 12 else ("Afternoon" if now.hour < 17 else "Evening")
 
-    lines = [f"CarHero {period} Deals -- {today}", "=" * 44, ""]
+    stats = stats or {}
+    fresh = stats.get("fresh_count", 0)
+    new_count = stats.get("new_count", 0)
 
-    lines.append("TOP PRICE DEALS")
+    lines = [f"CarHero Daily Deals -- {today}", "=" * 44, ""]
+
+    if fresh > 0:
+        lines.append(f"  {fresh:,} listings refreshed | {new_count:,} new today")
+        lines.append("")
+
+    if new_listings:
+        lines.append("NEW LISTINGS TODAY")
+        lines.append("-" * 44)
+        for c in new_listings:
+            km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else ""
+            src = _source_label(c.get("country"), c.get("provider"))
+            lines.append(f"  {c['make']} {c['model']} {c.get('year') or ''} {km} -- {_fmt_eur(c.get('price_eur'))} ({src})")
+        lines.append("")
+
+    if price_drops:
+        lines.append("PRICE DROPS")
+        lines.append("-" * 44)
+        for d in price_drops:
+            drop_pct = float(d.get("drop_pct") or 0)
+            lines.append(f"  {d['make']} {d['model']} {d.get('year') or ''}")
+            lines.append(f"    Was {_fmt_eur(d.get('old_price'))} -> Now {_fmt_eur(d.get('price_eur'))} (down {drop_pct:.0f}%)")
+        lines.append("")
+
+    lines.append("BEST PRICE ARBITRAGE")
     lines.append("-" * 44)
     for d in deals:
         cheapest_src = _source_label(d.get("cheapest_country"), d.get("cheapest_provider"))

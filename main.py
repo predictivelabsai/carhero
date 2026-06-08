@@ -80,7 +80,7 @@ register_garage_routes(rt)
 # --- Scraper + Daily digest scheduler ---
 
 SCRAPE_PROVIDERS = [
-    "autoscout24", "autotrader", "autohero",
+    "autoscout24", "autotrader", "autohero", "mobile_de", "theparking",
     "auto24_ee", "auto24_lt", "auto24_lv", "blocket",
     "otomoto", "coches", "marktplaats", "nettiauto", "bilbasen",
     "donedeal", "finn", "standvirtual", "autovit",
@@ -88,29 +88,34 @@ SCRAPE_PROVIDERS = [
 
 
 def _start_scrape_and_digest():
-    """Background daemon: scrape all providers, load to DB, then send digest.
+    """Background daemon: scrape all providers nightly, load to DB, then send digest.
 
     Timeline each day:
-        DIGEST_HOUR - 1  →  run all scrapers (sequential, ~45-60 min)
-        after scrape      →  load checkpoint JSONs into DB
-        DIGEST_HOUR       →  send deals digest email to all users
+        SCRAPE_HOUR (default 02:00 UTC)  →  run all scrapers (sequential, ~2-3h)
+        after scrape completes           →  load checkpoint JSONs into DB
+        after load completes             →  mark stale listings (not seen this run)
+        after cleanup                    →  send daily deals digest to all users
     """
     import threading
     import time as _time
     from datetime import datetime, timedelta
 
-    DIGEST_HOUR = int(os.environ.get("DIGEST_HOUR", "7"))
-    SCRAPE_HOUR = (DIGEST_HOUR - 1) % 24
+    SCRAPE_HOUR = int(os.environ.get("SCRAPE_HOUR", "2"))
 
     def _run_scrapers():
         from scripts.scrape_cars import get_scraper
+        succeeded, failed_list = 0, []
         for provider in SCRAPE_PROVIDERS:
             try:
                 print(f"INFO:     [scheduler] Scraping {provider}...", flush=True)
                 scraper = get_scraper(provider)
                 scraper(headless=True, limit=0, brand=None)
+                succeeded += 1
             except Exception as e:
                 print(f"ERROR:    [scheduler] Scraper {provider} failed: {e}", flush=True)
+                failed_list.append(provider)
+        print(f"INFO:     [scheduler] Scrape done: {succeeded} ok, {len(failed_list)} failed ({', '.join(failed_list) or 'none'})", flush=True)
+        return succeeded
 
     def _load_to_db():
         from scripts.scrape_cars import load_to_db
@@ -120,7 +125,25 @@ def _start_scrape_and_digest():
                 total += load_to_db(provider)
             except Exception as e:
                 print(f"ERROR:    [scheduler] DB load {provider} failed: {e}", flush=True)
-        print(f"INFO:     [scheduler] Loaded {total} new listings to DB", flush=True)
+        print(f"INFO:     [scheduler] Loaded {total} new/updated listings to DB", flush=True)
+        return total
+
+    def _mark_stale():
+        """Mark listings not refreshed in 7 days as stale."""
+        try:
+            from db import engine
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                result = conn.execute(text("""
+                    UPDATE carhero.car_listings
+                    SET status = 'stale'
+                    WHERE status = 'active'
+                      AND scraped_at < NOW() - INTERVAL '7 days'
+                """))
+                conn.commit()
+                print(f"INFO:     [scheduler] Marked {result.rowcount} stale listings", flush=True)
+        except Exception as e:
+            print(f"ERROR:    [scheduler] Stale cleanup failed: {e}", flush=True)
 
     def _run_digest():
         try:
@@ -134,22 +157,28 @@ def _start_scrape_and_digest():
     def _loop():
         while True:
             now = datetime.now()
-            scrape_target = now.replace(hour=SCRAPE_HOUR, minute=0, second=0, microsecond=0)
-            if scrape_target <= now:
-                scrape_target += timedelta(days=1)
-            wait = (scrape_target - now).total_seconds()
-            digest_time = scrape_target + timedelta(hours=1)
-            print(f"INFO:     [scheduler] Next scrape: {scrape_target.strftime('%Y-%m-%d %H:%M')} ({wait/3600:.1f}h), digest: {digest_time.strftime('%H:%M')}", flush=True)
+            target = now.replace(hour=SCRAPE_HOUR, minute=0, second=0, microsecond=0)
+            if target <= now:
+                target += timedelta(days=1)
+            wait = (target - now).total_seconds()
+            print(f"INFO:     [scheduler] Next scrape: {target.strftime('%Y-%m-%d %H:%M')} ({wait/3600:.1f}h)", flush=True)
             _time.sleep(wait)
 
-            print(f"INFO:     [scheduler] Starting scrape run...", flush=True)
-            _run_scrapers()
+            print(f"INFO:     [scheduler] === Nightly pipeline starting ===", flush=True)
 
-            print(f"INFO:     [scheduler] Loading data to DB...", flush=True)
-            _load_to_db()
+            print(f"INFO:     [scheduler] Step 1/4: Scraping...", flush=True)
+            scraped = _run_scrapers()
 
-            print(f"INFO:     [scheduler] Sending digest...", flush=True)
+            print(f"INFO:     [scheduler] Step 2/4: Loading to DB...", flush=True)
+            loaded = _load_to_db()
+
+            print(f"INFO:     [scheduler] Step 3/4: Cleaning stale listings...", flush=True)
+            _mark_stale()
+
+            print(f"INFO:     [scheduler] Step 4/4: Sending digest...", flush=True)
             _run_digest()
+
+            print(f"INFO:     [scheduler] === Nightly pipeline complete ===", flush=True)
 
     t = threading.Thread(target=_loop, daemon=True)
     t.start()
