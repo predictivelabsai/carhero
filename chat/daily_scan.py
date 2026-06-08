@@ -101,6 +101,8 @@ def register_daily_scan_routes(rt):
         def _default(o):
             if isinstance(o, Decimal):
                 return float(o)
+            if hasattr(o, 'isoformat'):
+                return o.isoformat()
             raise TypeError
 
         raw = _json.loads(_json.dumps({
@@ -132,12 +134,16 @@ _PAGE_JS = """
             const prov = s.providers_scraped || 0;
             const ctry = s.countries_covered || 0;
             const total = (s.total_active || 0).toLocaleString();
+            let scrapeDate = '';
+            if (s.last_scrape) {
+                const d = new Date(s.last_scrape);
+                scrapeDate = ' &middot; Last scan: ' + d.toLocaleDateString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+            }
             el('scan-stats').innerHTML =
-                '<strong>' + fresh + '</strong> listings refreshed &middot; ' +
+                '<strong>' + fresh + '</strong> listings &middot; ' +
                 '<strong>' + nw + '</strong> new &middot; ' +
                 '<strong>' + prov + '</strong> providers &middot; ' +
-                '<strong>' + ctry + '</strong> countries &middot; ' +
-                '<strong>' + total + '</strong> total active';
+                '<strong>' + ctry + '</strong> countries' + scrapeDate;
             el('scan-stats').style.display = 'block';
         }
 

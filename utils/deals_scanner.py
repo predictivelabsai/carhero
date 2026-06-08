@@ -1,8 +1,8 @@
 """Car Deals Scanner -- finds fresh daily deals from the latest scrape run.
 
-The digest is meaningful only when scrapers run nightly and load fresh data.
-Each scan function uses a freshness window (default 36h) so the digest
-reflects what changed in the most recent scrape cycle.
+Freshness is relative to the most recent scrape, not wall-clock time.
+This ensures stats and sections always reflect real data even if the
+last scrape was days ago.
 """
 from __future__ import annotations
 
@@ -14,8 +14,6 @@ from urllib.parse import quote
 log = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("SERVICE_URL_CARHERO", "https://carhero.chat")
-
-FRESHNESS_HOURS = int(os.getenv("DIGEST_FRESHNESS_HOURS", "36"))
 
 COUNTRY_LABELS = {
     "GB": "UK", "DE": "Germany", "EU": "Other EU",
@@ -46,23 +44,41 @@ PROVIDER_LABELS = {
 }
 
 
+def _scrape_cutoff(db) -> str:
+    """Compute the cutoff timestamp for 'latest scrape run'.
+
+    Returns a SQL expression string. The cutoff is MAX(scraped_at) minus
+    a 4-hour buffer to cover the span of a single scrape run across all
+    providers.  This means stats always reflect the most recent run,
+    even if it happened days ago.
+    """
+    from sqlalchemy import text
+    row = db.execute(text(
+        "SELECT MAX(scraped_at) FROM carhero.car_listings WHERE status = 'active'"
+    )).scalar()
+    if not row:
+        return "NOW() - INTERVAL '1 day'"
+    return f"TIMESTAMP '{row}' - INTERVAL '4 hours'"
+
+
 def scan_new_listings(limit: int = 10) -> list[dict]:
-    """Listings first seen in the latest scrape (created_at within freshness window)."""
+    """Listings first seen in the latest scrape run."""
     from db import SessionLocal
     from sqlalchemy import text
 
     db = SessionLocal()
     try:
-        sql = text("""
+        cutoff = _scrape_cutoff(db)
+        sql = text(f"""
             SELECT make, model, variant, year, mileage_km, price_eur,
                    country, provider, fuel_type, transmission, source_url
             FROM carhero.car_listings
             WHERE status = 'active' AND price_eur > 0
-              AND created_at > NOW() - MAKE_INTERVAL(hours => :hours)
+              AND created_at > ({cutoff})
             ORDER BY md5(make || model || CURRENT_DATE::text), price_eur ASC
             LIMIT :lim
         """)
-        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit, "hours": FRESHNESS_HOURS})]
+        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
     finally:
         db.close()
 
@@ -74,7 +90,8 @@ def scan_price_drops(limit: int = 10) -> list[dict]:
 
     db = SessionLocal()
     try:
-        sql = text("""
+        cutoff = _scrape_cutoff(db)
+        sql = text(f"""
             SELECT l.make, l.model, l.variant, l.year, l.mileage_km,
                    l.price_eur, l.country, l.provider, l.fuel_type,
                    l.transmission, l.source_url,
@@ -84,12 +101,12 @@ def scan_price_drops(limit: int = 10) -> list[dict]:
             FROM carhero.car_listings l
             JOIN carhero.price_history ph ON ph.listing_id = l.id
             WHERE l.status = 'active' AND l.price_eur > 0
-              AND ph.recorded_at > NOW() - MAKE_INTERVAL(hours => :hours)
+              AND ph.recorded_at > ({cutoff})
               AND ph.price_eur > l.price_eur
             ORDER BY (ph.price_eur - l.price_eur)::float / ph.price_eur DESC
             LIMIT :lim
         """)
-        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit, "hours": FRESHNESS_HOURS})]
+        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
     finally:
         db.close()
 
@@ -97,26 +114,14 @@ def scan_price_drops(limit: int = 10) -> list[dict]:
 def scan_deals(limit: int = 15) -> list[dict]:
     """Price arbitrage: same make/model with biggest spread across sources.
 
-    Uses freshly scraped listings only. Falls back to all active listings
-    if the fresh window has too few (< 1000 listings).
+    Uses listings from the latest scrape run.
     """
     from db import SessionLocal
     from sqlalchemy import text
 
     db = SessionLocal()
     try:
-        fresh_count = db.execute(text("""
-            SELECT COUNT(*) FROM carhero.car_listings
-            WHERE status = 'active' AND price_eur > 0
-              AND scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
-        """), {"hours": FRESHNESS_HOURS}).scalar()
-
-        freshness_filter = (
-            "AND scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)"
-            if fresh_count >= 1000 else ""
-        )
-        if fresh_count < 1000:
-            log.info("Only %d fresh listings, using full catalog for deals", fresh_count)
+        cutoff = _scrape_cutoff(db)
 
         sql = text(f"""
             WITH by_source AS (
@@ -127,7 +132,7 @@ def scan_deals(limit: int = 15) -> list[dict]:
                        ROUND(MAX(price_eur)::numeric, 0) AS max_price
                 FROM carhero.car_listings
                 WHERE status = 'active' AND price_eur > 0
-                  {freshness_filter}
+                  AND scraped_at > ({cutoff})
                 GROUP BY make, model, country, provider
                 HAVING COUNT(*) >= 1
             ),
@@ -149,8 +154,7 @@ def scan_deals(limit: int = 15) -> list[dict]:
             ORDER BY savings_pct DESC
             LIMIT :lim
         """)
-        params = {"lim": limit, "hours": FRESHNESS_HOURS}
-        rows = [dict(r._mapping) for r in db.execute(sql, params)]
+        rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
 
         for row in rows:
             cheapest = db.execute(text("""
@@ -225,63 +229,54 @@ def scan_deals(limit: int = 15) -> list[dict]:
 
 
 def scan_lowest_prices(limit: int = 10) -> list[dict]:
-    """Cheapest active listings from the latest scrape."""
+    """Cheapest active listings from the latest scrape run."""
     from db import SessionLocal
     from sqlalchemy import text
 
     db = SessionLocal()
     try:
-        sql = text("""
+        cutoff = _scrape_cutoff(db)
+        sql = text(f"""
             SELECT make, model, variant, year, mileage_km, price_eur,
                    country, provider, fuel_type, transmission, source_url
             FROM carhero.car_listings
             WHERE status = 'active' AND price_eur > 0
-              AND scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
+              AND scraped_at > ({cutoff})
             ORDER BY price_eur ASC
             LIMIT :lim
         """)
-        rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit, "hours": FRESHNESS_HOURS})]
-        if not rows:
-            log.info("No fresh cheapest listings, falling back to all active")
-            sql = text("""
-                SELECT make, model, variant, year, mileage_km, price_eur,
-                       country, provider, fuel_type, transmission, source_url
-                FROM carhero.car_listings
-                WHERE status = 'active' AND price_eur > 0
-                ORDER BY price_eur ASC
-                LIMIT :lim
-            """)
-            rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
-        return rows
+        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
     finally:
         db.close()
 
 
 def scan_freshness_stats() -> dict:
-    """Summary stats for the digest header."""
+    """Summary stats for the digest header, based on latest scrape run."""
     from db import SessionLocal
     from sqlalchemy import text
 
     db = SessionLocal()
     try:
-        row = db.execute(text("""
+        cutoff = _scrape_cutoff(db)
+        row = db.execute(text(f"""
             SELECT
                 COUNT(*) AS total_active,
                 COUNT(*) FILTER (
-                    WHERE scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
+                    WHERE scraped_at > ({cutoff})
                 ) AS fresh_count,
                 COUNT(*) FILTER (
-                    WHERE created_at > NOW() - MAKE_INTERVAL(hours => :hours)
+                    WHERE created_at > ({cutoff})
                 ) AS new_count,
                 COUNT(DISTINCT provider) FILTER (
-                    WHERE scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
+                    WHERE scraped_at > ({cutoff})
                 ) AS providers_scraped,
                 COUNT(DISTINCT country) FILTER (
-                    WHERE scraped_at > NOW() - MAKE_INTERVAL(hours => :hours)
-                ) AS countries_covered
+                    WHERE scraped_at > ({cutoff})
+                ) AS countries_covered,
+                MAX(scraped_at) AS last_scrape
             FROM carhero.car_listings
             WHERE status = 'active'
-        """), {"hours": FRESHNESS_HOURS}).first()
+        """)).first()
         return dict(row._mapping) if row else {}
     finally:
         db.close()
