@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from api.auth import create_token
 from api.schemas import (
     LoginRequest, RegisterRequest, AuthResponse, UserInfo,
-    ChatRequest, SessionSummary, SessionDetail, MessageOut, ShareResponse,
+    ChatRequest, SessionSummary, SessionDetail, MessageOut, ShareResponse, SharedSessionOut,
     AgentOut,
     FavoriteOut, AddFavoriteRequest, UpdateNoteRequest,
     SavedSearchOut, CreateSearchRequest,
@@ -258,6 +258,27 @@ def create_app(root_path: str = "") -> FastAPI:
             )
             db.commit()
         return ShareResponse(token=token, url=f"/shared/{token}")
+
+    @api.get("/shared/{token}", response_model=SharedSessionOut, tags=["sessions"])
+    def get_shared_session(token: str, db: Session = Depends(get_db)):
+        row = db.execute(
+            text(f"SELECT s.id, s.title, s.agent_slug "
+                 f"FROM {SCHEMA}.chat_sessions s "
+                 f"WHERE s.share_token = :token"),
+            {"token": token},
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Shared session not found")
+        msgs = db.execute(
+            text(f"SELECT role, content, agent_slug FROM {SCHEMA}.chat_messages "
+                 "WHERE session_id = :sid ORDER BY id ASC"),
+            {"sid": row[0]},
+        ).fetchall()
+        return SharedSessionOut(
+            title=row[1] or "Shared Chat",
+            agent_slug=row[2],
+            messages=[MessageOut(role=m.role, content=m.content, agent_slug=m.agent_slug) for m in msgs],
+        )
 
     # ── Chat (SSE streaming) ─────────────────────────────────────────
 

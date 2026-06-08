@@ -56,6 +56,11 @@ class ShareResponse(BaseModel):
     token: str
     url: str
 
+class SharedSessionOut(BaseModel):
+    title: str
+    agent_slug: str | None = None
+    messages: list[MessageOut]
+
 
 # ── Agents ────────────────────────────────────────────────────────────
 
