@@ -46,6 +46,7 @@ def register_daily_scan_routes(rt):
                     cls="chat-header",
                 ),
                 Div(
+                    NotStr(_MOBILE_CSS),
                     H2("Daily Scan", cls="text-xl font-display font-bold mb-1"),
                     P("Price comparisons across European markets. Biggest savings first.",
                       cls="text-sm text-gray-500 mb-4"),
@@ -104,6 +105,101 @@ def register_daily_scan_routes(rt):
         return JSONResponse(raw)
 
 
+_MOBILE_CSS = """<style>
+.scan-filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+}
+.scan-filters-grid input,
+.scan-filters-grid select {
+    padding: 8px 10px;
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #fff;
+}
+.scan-filters-grid select {
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%236B7280' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+    padding-right: 28px;
+}
+.scan-filters-grid .f-search-full {
+    grid-column: 1 / -1;
+}
+.scan-filters-grid button {
+    padding: 8px 12px;
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    background: #F9FAFB;
+    white-space: nowrap;
+}
+.scan-card {
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 4px;
+}
+.scan-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.scan-card-prices {
+    display: flex;
+    gap: 8px;
+}
+.scan-price-box {
+    flex: 1;
+    border-radius: 6px;
+    padding: 8px 10px;
+    min-width: 0;
+}
+.scan-drop-card {
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+.scan-badge {
+    display: inline-block;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+@media (max-width: 480px) {
+    .scan-filters-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .scan-card-prices {
+        flex-direction: column;
+    }
+    .scan-drop-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .scan-drop-card > div:last-child {
+        text-align: left;
+        width: 100%;
+        margin-top: 4px;
+    }
+}
+</style>"""
+
 _PAGE_JS = """
 (async function() {
     const el = id => document.getElementById(id);
@@ -155,15 +251,14 @@ _PAGE_JS = """
             const makes = [...new Set(allComparisons.map(d => d.make))].sort();
             const years = [...new Set(allComparisons.map(d => d.year).filter(Boolean))].sort((a,b) => b-a);
 
-            const iStyle = 'padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;flex:1;min-width:0;';
             el('scan-filters').innerHTML =
-                '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
-                    '<input id="f-search" type="text" placeholder="Search make or model..." style="' + iStyle + 'flex:2;">' +
-                    '<select id="f-make" style="' + iStyle + '"><option value="">All makes</option>' +
+                '<div class="scan-filters-grid">' +
+                    '<input id="f-search" type="text" placeholder="Search make or model..." class="f-search-full">' +
+                    '<select id="f-make"><option value="">All makes</option>' +
                         makes.map(m => '<option value="' + m + '">' + m + '</option>').join('') + '</select>' +
-                    '<select id="f-year" style="' + iStyle + '"><option value="">All years</option>' +
+                    '<select id="f-year"><option value="">All years</option>' +
                         years.map(y => '<option value="' + y + '">' + y + '</option>').join('') + '</select>' +
-                    '<select id="f-gap" style="' + iStyle + '">' +
+                    '<select id="f-gap">' +
                         '<option value="0">Any price gap</option>' +
                         '<option value="1000">\\u2265 \\u20AC1,000</option>' +
                         '<option value="5000">\\u2265 \\u20AC5,000</option>' +
@@ -171,7 +266,7 @@ _PAGE_JS = """
                         '<option value="25000">\\u2265 \\u20AC25,000</option>' +
                         '<option value="50000">\\u2265 \\u20AC50,000</option>' +
                     '</select>' +
-                    '<button id="f-clear" style="padding:6px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;cursor:pointer;background:#F9FAFB;white-space:nowrap;">Clear</button>' +
+                    '<button id="f-clear">Clear</button>' +
                 '</div>';
             el('scan-filters').style.display = 'block';
 
@@ -221,20 +316,20 @@ _PAGE_JS = """
                 const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
                 const cheapKm = kmLabel(d.cheap_km);
                 const expKm = kmLabel(d.expensive_km);
-                return '<div style="border:1px solid #E5E7EB;border-radius:8px;padding:12px 14px;margin-bottom:2px;">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+                return '<div class="scan-card">' +
+                    '<div class="scan-card-header">' +
                         '<div><strong style="font-size:14px;">' + d.make + ' ' + d.model + '</strong> <span style="color:#6B7280;font-size:13px;">' + (d.year||'') + '</span>' +
                         '<br><span style="font-size:11px;color:#9CA3AF;">' + (d.listing_count||0) + ' listings \\u00B7 ' + (d.source_count||0) + ' sources</span></div>' +
-                        '<div><span style="background:' + color + ';color:white;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;">Save ' + fmtEur(d.savings_eur) + ' (' + Number(pct).toFixed(0) + '%)</span></div>' +
+                        '<div><span class="scan-badge" style="background:' + color + ';">Save ' + fmtEur(d.savings_eur) + ' (' + Number(pct).toFixed(0) + '%)</span></div>' +
                     '</div>' +
-                    '<div style="display:flex;gap:8px;">' +
-                        '<div style="flex:1;background:#F0FDF4;border-radius:6px;padding:8px 10px;">' +
+                    '<div class="scan-card-prices">' +
+                        '<div class="scan-price-box" style="background:#F0FDF4;">' +
                             '<div style="font-size:10px;color:#16A34A;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Cheapest</div>' +
                             '<div style="font-size:15px;font-weight:700;color:#15803D;">' + fmtEur(d.cheap_price) + '</div>' +
                             '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.cheap_country, d.cheap_provider) + (cheapKm ? ' \\u00B7 ' + cheapKm : '') + '</div>' +
                             '<div style="margin-top:4px;">' + viewLink(d.cheap_url) + '</div>' +
                         '</div>' +
-                        '<div style="flex:1;background:#FEF2F2;border-radius:6px;padding:8px 10px;">' +
+                        '<div class="scan-price-box" style="background:#FEF2F2;">' +
                             '<div style="font-size:10px;color:#DC2626;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Most Expensive</div>' +
                             '<div style="font-size:15px;font-weight:700;color:#991B1B;">' + fmtEur(d.expensive_price) + '</div>' +
                             '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.expensive_country, d.expensive_provider) + (expKm ? ' \\u00B7 ' + expKm : '') + '</div>' +
@@ -259,7 +354,7 @@ _PAGE_JS = """
                 const yr = d.year || '';
                 const src = srcLabel(d.country, d.provider);
                 const url = viewLink(d.source_url);
-                return '<div style="border:1px solid #E5E7EB;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">' +
+                return '<div class="scan-drop-card">' +
                     '<div><strong>' + d.make + ' ' + d.model + '</strong> ' + (d.variant||'') +
                     '<br><span style="font-size:12px;color:#6B7280;">' + yr + (yr && km ? ' \\u00B7 ' : '') + km + ' \\u00B7 ' + src + '</span></div>' +
                     '<div style="text-align:right;">' + fmtEur(d.price_eur) +

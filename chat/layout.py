@@ -32,8 +32,13 @@ tailwind.config = {
 def _head(title: str = "CarHero") -> Head:
     return Head(
         Meta(charset="utf-8"),
-        Meta(name="viewport", content="width=device-width, initial-scale=1"),
+        Meta(name="viewport", content="width=device-width, initial-scale=1, viewport-fit=cover"),
+        Meta(name="theme-color", content="#1A1A1A"),
+        Meta(name="apple-mobile-web-app-capable", content="yes"),
+        Meta(name="apple-mobile-web-app-status-bar-style", content="black-translucent"),
         Link(rel="icon", href="/static/favicon.svg", type="image/svg+xml"),
+        Link(rel="apple-touch-icon", href="/static/favicon.svg"),
+        Link(rel="manifest", href="/static/manifest.json"),
         Title(f"{title} -- CarHero"),
         Link(rel="preconnect", href="https://fonts.googleapis.com"),
         Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin=""),
