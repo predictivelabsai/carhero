@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from utils.deals_scanner import (
-    scan_deals, scan_lowest_prices, scan_new_listings, scan_price_drops,
+    scan_price_comparisons, scan_price_drops,
     scan_freshness_stats, build_digest_html, build_digest_text,
 )
 from utils.email import send_email
@@ -61,9 +61,7 @@ def main():
     parser.add_argument("--from-email", default=os.getenv("FROM_EMAIL", "info@carhero.chat"))
     parser.add_argument("--dry-run", action="store_true", help="Print HTML without sending")
     parser.add_argument("--all", action="store_true", help="Send to all registered users with digest enabled")
-    parser.add_argument("--deals", type=int, default=15, help="Number of top deals")
-    parser.add_argument("--cheapest", type=int, default=10, help="Number of cheapest listings")
-    parser.add_argument("--new", type=int, default=10, help="Number of new listings")
+    parser.add_argument("--deals", type=int, default=25, help="Number of price comparisons")
     parser.add_argument("--drops", type=int, default=10, help="Number of price drops")
     args = parser.parse_args()
 
@@ -71,24 +69,16 @@ def main():
     stats = scan_freshness_stats()
     log.info("Stats: %s", stats)
 
-    log.info("Scanning new listings...")
-    new_listings = scan_new_listings(limit=args.new)
-    log.info("Found %d new listings", len(new_listings))
+    log.info("Scanning price comparisons...")
+    comparisons = scan_price_comparisons(limit=args.deals)
+    log.info("Found %d price comparisons", len(comparisons))
 
     log.info("Scanning price drops...")
     price_drops = scan_price_drops(limit=args.drops)
     log.info("Found %d price drops", len(price_drops))
 
-    log.info("Scanning price arbitrage deals...")
-    deals = scan_deals(limit=args.deals)
-    log.info("Found %d deals with price spread", len(deals))
-
-    log.info("Scanning lowest prices...")
-    cheapest = scan_lowest_prices(limit=args.cheapest)
-    log.info("Found %d cheapest listings", len(cheapest))
-
-    html = build_digest_html(deals, cheapest, new_listings, price_drops, stats)
-    text = build_digest_text(deals, cheapest, new_listings, price_drops, stats)
+    html = build_digest_html(comparisons, price_drops=price_drops, stats=stats)
+    text = build_digest_text(comparisons, price_drops=price_drops, stats=stats)
 
     now = datetime.now()
     subject = f"CarHero Daily Deals — {now.strftime('%b %d, %Y')}"

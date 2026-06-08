@@ -61,8 +61,13 @@ def _scrape_cutoff(db) -> str:
     return f"TIMESTAMP '{row}' - INTERVAL '4 hours'"
 
 
-def scan_new_listings(limit: int = 10) -> list[dict]:
-    """Listings first seen in the latest scrape run."""
+def scan_price_comparisons(limit: int = 25) -> list[dict]:
+    """Price arbitrage grouped by make/model/year.
+
+    For each make+model+year combo that appears in 2+ sources, returns the
+    cheapest and most expensive listing with source details, sorted by
+    savings percentage.  This is the core of the Daily Scan.
+    """
     from db import SessionLocal
     from sqlalchemy import text
 
@@ -70,15 +75,71 @@ def scan_new_listings(limit: int = 10) -> list[dict]:
     try:
         cutoff = _scrape_cutoff(db)
         sql = text(f"""
-            SELECT make, model, variant, year, mileage_km, price_eur,
-                   country, provider, fuel_type, transmission, source_url
-            FROM carhero.car_listings
-            WHERE status = 'active' AND price_eur > 0
-              AND created_at > ({cutoff})
-            ORDER BY md5(make || model || CURRENT_DATE::text), price_eur ASC
+            WITH fresh AS (
+                SELECT id, make, model, year, price_eur, mileage_km,
+                       country, provider, source_url, fuel_type, variant
+                FROM carhero.car_listings
+                WHERE status = 'active' AND price_eur > 500
+                  AND year IS NOT NULL
+                  AND scraped_at > ({cutoff})
+            ),
+            grouped AS (
+                SELECT make, model, year,
+                       COUNT(*) AS listing_count,
+                       COUNT(DISTINCT country || '/' || provider) AS source_count,
+                       ROUND(MIN(price_eur)::numeric, 0) AS min_price,
+                       ROUND(MAX(price_eur)::numeric, 0) AS max_price,
+                       ROUND(AVG(price_eur)::numeric, 0) AS avg_price,
+                       (MAX(price_eur) - MIN(price_eur)) AS savings_eur,
+                       ROUND(((MAX(price_eur) - MIN(price_eur))
+                              / NULLIF(AVG(price_eur), 0) * 100)::numeric, 1) AS savings_pct
+                FROM fresh
+                GROUP BY make, model, year
+                HAVING COUNT(*) >= 2
+                   AND COUNT(DISTINCT country || '/' || provider) >= 2
+                   AND (MAX(price_eur) - MIN(price_eur)) > 500
+            )
+            SELECT * FROM grouped
+            WHERE savings_pct BETWEEN 5 AND 300
+            ORDER BY savings_eur DESC
             LIMIT :lim
         """)
-        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
+        rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
+
+        for row in rows:
+            c = db.execute(text("""
+                SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type
+                FROM carhero.car_listings
+                WHERE make = :make AND model = :model AND year = :year
+                  AND status = 'active' AND price_eur > 500
+                ORDER BY price_eur ASC LIMIT 1
+            """), {"make": row["make"], "model": row["model"], "year": row["year"]}).first()
+            if c:
+                row["cheap_price"] = float(c.price_eur)
+                row["cheap_country"] = c.country
+                row["cheap_provider"] = c.provider
+                row["cheap_url"] = c.source_url
+                row["cheap_km"] = c.mileage_km
+                row["cheap_variant"] = c.variant
+                row["cheap_fuel"] = c.fuel_type
+
+            p = db.execute(text("""
+                SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type
+                FROM carhero.car_listings
+                WHERE make = :make AND model = :model AND year = :year
+                  AND status = 'active' AND price_eur > 500
+                ORDER BY price_eur DESC LIMIT 1
+            """), {"make": row["make"], "model": row["model"], "year": row["year"]}).first()
+            if p:
+                row["expensive_price"] = float(p.price_eur)
+                row["expensive_country"] = p.country
+                row["expensive_provider"] = p.provider
+                row["expensive_url"] = p.source_url
+                row["expensive_km"] = p.mileage_km
+                row["expensive_variant"] = p.variant
+                row["expensive_fuel"] = p.fuel_type
+
+        return rows
     finally:
         db.close()
 
@@ -104,145 +165,6 @@ def scan_price_drops(limit: int = 10) -> list[dict]:
               AND ph.recorded_at > ({cutoff})
               AND ph.price_eur > l.price_eur
             ORDER BY (ph.price_eur - l.price_eur)::float / ph.price_eur DESC
-            LIMIT :lim
-        """)
-        return [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
-    finally:
-        db.close()
-
-
-def scan_deals(limit: int = 15) -> list[dict]:
-    """Price arbitrage: same make/model with biggest spread across sources.
-
-    Uses listings from the latest scrape run.
-    """
-    from db import SessionLocal
-    from sqlalchemy import text
-
-    db = SessionLocal()
-    try:
-        cutoff = _scrape_cutoff(db)
-
-        sql = text(f"""
-            WITH by_source AS (
-                SELECT make, model, country, provider,
-                       COUNT(*) AS cnt,
-                       ROUND(AVG(price_eur)::numeric, 0) AS avg_price,
-                       ROUND(MIN(price_eur)::numeric, 0) AS min_price,
-                       ROUND(MAX(price_eur)::numeric, 0) AS max_price
-                FROM carhero.car_listings
-                WHERE status = 'active' AND price_eur > 0
-                  AND scraped_at > ({cutoff})
-                GROUP BY make, model, country, provider
-                HAVING COUNT(*) >= 1
-            ),
-            spreads AS (
-                SELECT make, model,
-                       SUM(cnt) AS listing_count,
-                       MIN(min_price) AS min_price,
-                       MAX(max_price) AS max_price,
-                       ROUND(AVG(avg_price)::numeric, 0) AS avg_price,
-                       (MAX(max_price) - MIN(min_price)) AS savings_eur,
-                       ROUND(((MAX(max_price) - MIN(min_price))
-                              / NULLIF(AVG(avg_price), 0) * 100)::numeric, 1) AS savings_pct
-                FROM by_source
-                GROUP BY make, model
-                HAVING COUNT(DISTINCT country || '/' || provider) >= 2
-            )
-            SELECT * FROM spreads
-            WHERE savings_eur > 0
-            ORDER BY savings_pct DESC
-            LIMIT :lim
-        """)
-        rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
-
-        for row in rows:
-            cheapest = db.execute(text("""
-                SELECT id, country, provider
-                FROM carhero.car_listings
-                WHERE make = :make AND model = :model
-                  AND status = 'active' AND price_eur > 0
-                ORDER BY price_eur ASC LIMIT 1
-            """), {"make": row["make"], "model": row["model"]})
-            c = cheapest.first()
-            if c:
-                row["cheapest_country"] = c.country
-                row["cheapest_provider"] = c.provider
-                row["cheapest_listing_id"] = c.id
-
-            priciest = db.execute(text("""
-                SELECT id, country, provider
-                FROM carhero.car_listings
-                WHERE make = :make AND model = :model
-                  AND status = 'active' AND price_eur > 0
-                ORDER BY price_eur DESC LIMIT 1
-            """), {"make": row["make"], "model": row["model"]})
-            p = priciest.first()
-            if p:
-                row["priciest_country"] = p.country
-                row["priciest_provider"] = p.provider
-                row["priciest_listing_id"] = p.id
-
-            deal_row = db.execute(text("""
-                INSERT INTO carhero.deals
-                    (make, model, cheapest_listing_id, priciest_listing_id,
-                     cheapest_price_eur, priciest_price_eur, savings_eur, savings_pct,
-                     cheapest_country, cheapest_provider, priciest_country, priciest_provider,
-                     listing_count, status, updated_at)
-                VALUES
-                    (:make, :model, :cl, :pl,
-                     :min_price, :max_price, :savings_eur, :savings_pct,
-                     :cc, :cp, :pc, :pp,
-                     :cnt, 'active', NOW())
-                ON CONFLICT (make, model) DO UPDATE SET
-                    cheapest_listing_id  = EXCLUDED.cheapest_listing_id,
-                    priciest_listing_id  = EXCLUDED.priciest_listing_id,
-                    cheapest_price_eur   = EXCLUDED.cheapest_price_eur,
-                    priciest_price_eur   = EXCLUDED.priciest_price_eur,
-                    savings_eur          = EXCLUDED.savings_eur,
-                    savings_pct          = EXCLUDED.savings_pct,
-                    cheapest_country     = EXCLUDED.cheapest_country,
-                    cheapest_provider    = EXCLUDED.cheapest_provider,
-                    priciest_country     = EXCLUDED.priciest_country,
-                    priciest_provider    = EXCLUDED.priciest_provider,
-                    listing_count        = EXCLUDED.listing_count,
-                    status               = 'active',
-                    updated_at           = NOW()
-                RETURNING id
-            """), {
-                "make": row["make"], "model": row["model"],
-                "cl": row.get("cheapest_listing_id"),
-                "pl": row.get("priciest_listing_id"),
-                "min_price": row["min_price"], "max_price": row["max_price"],
-                "savings_eur": row["savings_eur"], "savings_pct": row["savings_pct"],
-                "cc": row.get("cheapest_country"), "cp": row.get("cheapest_provider"),
-                "pc": row.get("priciest_country"), "pp": row.get("priciest_provider"),
-                "cnt": row.get("listing_count", 0),
-            })
-            deal = deal_row.first()
-            row["deal_id"] = str(deal.id) if deal else None
-
-        db.commit()
-        return rows
-    finally:
-        db.close()
-
-
-def scan_lowest_prices(limit: int = 10) -> list[dict]:
-    """Cheapest active listings from the latest scrape run."""
-    from db import SessionLocal
-    from sqlalchemy import text
-
-    db = SessionLocal()
-    try:
-        cutoff = _scrape_cutoff(db)
-        sql = text(f"""
-            SELECT make, model, variant, year, mileage_km, price_eur,
-                   country, provider, fuel_type, transmission, source_url
-            FROM carhero.car_listings
-            WHERE status = 'active' AND price_eur > 0
-              AND scraped_at > ({cutoff})
-            ORDER BY price_eur ASC
             LIMIT :lim
         """)
         return [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
@@ -304,9 +226,7 @@ def _source_label(country: str | None, provider: str | None) -> str:
 
 
 def build_digest_html(
-    deals: list[dict],
-    cheapest: list[dict],
-    new_listings: list[dict] | None = None,
+    comparisons: list[dict],
     price_drops: list[dict] | None = None,
     stats: dict | None = None,
 ) -> str:
@@ -332,47 +252,6 @@ def build_digest_html(
             <strong>{providers}</strong> providers &middot;
             <strong>{countries}</strong> countries
         </span>
-    </div>"""
-
-    # --- New listings section ---
-    new_html = ""
-    if new_listings:
-        rows_html = ""
-        for c in new_listings:
-            km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else "--"
-            src = _source_label(c.get("country"), c.get("provider"))
-            deal_url = f"{BASE_URL}/app?deal={quote(c['make'] + ' ' + c['model'])}"
-            rows_html += f"""
-            <tr>
-                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB;">
-                    <a href="{deal_url}" style="{link_style}">
-                        <strong>{c['make']} {c['model']}</strong>
-                        <span style="color:#6B7280; font-size:12px;">
-                            {c.get('variant') or ''} &middot; {c.get('year') or ''} &middot; {km}
-                        </span>
-                    </a>
-                </td>
-                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
-                    <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px; font-weight:600; color:#1A1A1A;">
-                        {_fmt_eur(c.get('price_eur'))}
-                    </a>
-                </td>
-                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
-                    <a href="{deal_url}" style="{link_style} font-size:11px; color:#6B7280;">{src}</a>
-                </td>
-            </tr>"""
-
-        new_html = f"""
-    <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #16A34A; padding-bottom:6px;">
-            &#x1F195; New Listings Today
-        </h2>
-        <p style="color:#6B7280; font-size:12px; margin:0 0 12px;">
-            Just appeared across European markets.
-        </p>
-        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
-            <tbody>{rows_html}</tbody>
-        </table>
     </div>"""
 
     # --- Price drops section ---
@@ -421,72 +300,45 @@ def build_digest_html(
         </table>
     </div>"""
 
-    # --- Top deals section ---
+    # --- Price comparisons section ---
     deal_rows = ""
-    for d in deals:
+    for d in comparisons:
         savings_pct = float(d.get("savings_pct") or 0)
+        savings_eur = float(d.get("savings_eur") or 0)
         badge_color = "#16A34A" if savings_pct >= 15 else "#F59E0B" if savings_pct >= 8 else "#6B7280"
-        cheapest_src = _source_label(d.get("cheapest_country"), d.get("cheapest_provider"))
-        priciest_src = _source_label(d.get("priciest_country"), d.get("priciest_provider"))
-        deal_id = d.get("deal_id") or ""
-        deal_url = f"{BASE_URL}/app?deal_id={deal_id}" if deal_id else f"{BASE_URL}/app?deal={quote(d['make'] + ' ' + d['model'])}"
+        cheap_src = _source_label(d.get("cheap_country"), d.get("cheap_provider"))
+        expensive_src = _source_label(d.get("expensive_country"), d.get("expensive_provider"))
+        cheap_url = d.get("cheap_url") or ""
+        expensive_url = d.get("expensive_url") or ""
+        cheap_link = f'<a href="{cheap_url}" style="font-size:10px; color:#15803D; text-decoration:underline;">View listing</a>' if cheap_url else ""
+        expensive_link = f'<a href="{expensive_url}" style="font-size:10px; color:#991B1B; text-decoration:underline;">View listing</a>' if expensive_url else ""
 
         deal_rows += f"""
         <tr>
             <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB;">
-                <a href="{deal_url}" style="{link_style}">
-                    <strong style="color:#1A1A1A; font-size:14px;">{d['make']} {d['model']}</strong><br>
-                    <span style="font-size:11px; color:#6B7280;">{int(d.get('listing_count') or 0)} listings</span>
-                </a>
+                <strong style="color:#1A1A1A; font-size:14px;">{d['make']} {d['model']}</strong>
+                <span style="color:#6B7280; font-size:12px;">{d.get('year') or ''}</span><br>
+                <span style="font-size:11px; color:#6B7280;">{int(d.get('listing_count') or 0)} listings &middot; {int(d.get('source_count') or 0)} sources</span>
             </td>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
-                <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px;">
-                    {_fmt_eur(d.get('min_price'))}<br>
-                    <span style="font-size:10px; color:#6B7280;">{cheapest_src}</span>
-                </a>
+            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right; background:#F0FDF4;">
+                <span style="font-family:'Courier New',monospace; font-size:13px; font-weight:700; color:#15803D;">
+                    {_fmt_eur(d.get('cheap_price'))}
+                </span><br>
+                <span style="font-size:10px; color:#6B7280;">{cheap_src}</span><br>
+                {cheap_link}
             </td>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
-                <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px;">
-                    {_fmt_eur(d.get('max_price'))}<br>
-                    <span style="font-size:10px; color:#6B7280;">{priciest_src}</span>
-                </a>
+            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right; background:#FEF2F2;">
+                <span style="font-family:'Courier New',monospace; font-size:13px; font-weight:700; color:#991B1B;">
+                    {_fmt_eur(d.get('expensive_price'))}
+                </span><br>
+                <span style="font-size:10px; color:#6B7280;">{expensive_src}</span><br>
+                {expensive_link}
             </td>
             <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:center;">
-                <a href="{deal_url}" style="{link_style}">
-                    <span style="background:{badge_color}; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">
-                        {savings_pct:.0f}%
-                    </span><br>
-                    <span style="font-size:11px; color:#16A34A; font-weight:600;">Save {_fmt_eur(d.get('savings_eur'))}</span><br>
-                    <span style="font-size:10px; color:#000; font-weight:500;">Ask CarHero &rarr;</span>
-                </a>
-            </td>
-        </tr>"""
-
-    # --- Cheapest listings section ---
-    cheapest_rows = ""
-    for c in cheapest:
-        km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else "--"
-        src = _source_label(c.get("country"), c.get("provider"))
-        deal_url = f"{BASE_URL}/app?deal={quote(c['make'] + ' ' + c['model'])}"
-        cheapest_rows += f"""
-        <tr>
-            <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB;">
-                <a href="{deal_url}" style="{link_style}">
-                    <strong>{c['make']} {c['model']}</strong>
-                    <span style="color:#6B7280; font-size:12px;">
-                        {c.get('variant') or ''} &middot; {c.get('year') or ''} &middot; {km}
-                    </span>
-                </a>
-            </td>
-            <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
-                <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px; font-weight:600; color:#1A1A1A;">
-                    {_fmt_eur(c.get('price_eur'))}
-                </a>
-            </td>
-            <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
-                <a href="{deal_url}" style="{link_style} font-size:11px; color:#6B7280;">
-                    {src}
-                </a>
+                <span style="background:{badge_color}; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">
+                    {savings_pct:.0f}%
+                </span><br>
+                <span style="font-size:11px; color:#16A34A; font-weight:600;">Save {_fmt_eur(savings_eur)}</span>
             </td>
         </tr>"""
 
@@ -506,10 +358,9 @@ def build_digest_html(
     </div>
 
     {stats_html}
-    {new_html}
     {drops_html}
 
-    <!-- Top Deals -->
+    <!-- Price Comparisons -->
     <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
         <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #000000; padding-bottom:6px;">
             &#x1F4B0; Best Price Arbitrage
@@ -522,24 +373,12 @@ def build_digest_html(
                 <tr style="color:#6B7280; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">
                     <th style="padding:6px 12px; text-align:left;">Car</th>
                     <th style="padding:6px 12px; text-align:right;">Cheapest</th>
-                    <th style="padding:6px 12px; text-align:right;">Priciest</th>
+                    <th style="padding:6px 12px; text-align:right;">Most Expensive</th>
                     <th style="padding:6px 12px; text-align:center;">Savings</th>
                 </tr>
             </thead>
             <tbody>
                 {deal_rows if deal_rows else '<tr><td colspan="4" style="padding:16px; text-align:center; color:#6B7280;">No price differences found yet.</td></tr>'}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Cheapest Listings -->
-    <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #000000; padding-bottom:6px;">
-            &#x1F3F7; Lowest Prices Right Now
-        </h2>
-        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
-            <tbody>
-                {cheapest_rows if cheapest_rows else '<tr><td style="padding:16px; text-align:center; color:#6B7280;">No listings yet.</td></tr>'}
             </tbody>
         </table>
     </div>
@@ -562,9 +401,7 @@ def build_digest_html(
 
 
 def build_digest_text(
-    deals: list[dict],
-    cheapest: list[dict],
-    new_listings: list[dict] | None = None,
+    comparisons: list[dict],
     price_drops: list[dict] | None = None,
     stats: dict | None = None,
 ) -> str:
@@ -581,15 +418,6 @@ def build_digest_text(
         lines.append(f"  {fresh:,} listings refreshed | {new_count:,} new today")
         lines.append("")
 
-    if new_listings:
-        lines.append("NEW LISTINGS TODAY")
-        lines.append("-" * 44)
-        for c in new_listings:
-            km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else ""
-            src = _source_label(c.get("country"), c.get("provider"))
-            lines.append(f"  {c['make']} {c['model']} {c.get('year') or ''} {km} -- {_fmt_eur(c.get('price_eur'))} ({src})")
-        lines.append("")
-
     if price_drops:
         lines.append("PRICE DROPS")
         lines.append("-" * 44)
@@ -601,21 +429,18 @@ def build_digest_text(
 
     lines.append("BEST PRICE ARBITRAGE")
     lines.append("-" * 44)
-    for d in deals:
-        cheapest_src = _source_label(d.get("cheapest_country"), d.get("cheapest_provider"))
-        priciest_src = _source_label(d.get("priciest_country"), d.get("priciest_provider"))
-        lines.append(f"  {d['make']} {d['model']}  ({int(d.get('listing_count') or 0)} listings)")
-        lines.append(f"    Cheapest: {_fmt_eur(d.get('min_price'))} ({cheapest_src})")
-        lines.append(f"    Priciest: {_fmt_eur(d.get('max_price'))} ({priciest_src})")
+    for d in comparisons:
+        cheap_src = _source_label(d.get("cheap_country"), d.get("cheap_provider"))
+        expensive_src = _source_label(d.get("expensive_country"), d.get("expensive_provider"))
+        lines.append(f"  {d['make']} {d['model']} {d.get('year') or ''}  ({int(d.get('listing_count') or 0)} listings)")
+        lines.append(f"    Cheapest:  {_fmt_eur(d.get('cheap_price'))} ({cheap_src})")
+        if d.get("cheap_url"):
+            lines.append(f"               {d['cheap_url']}")
+        lines.append(f"    Expensive: {_fmt_eur(d.get('expensive_price'))} ({expensive_src})")
+        if d.get("expensive_url"):
+            lines.append(f"               {d['expensive_url']}")
         lines.append(f"    Save {_fmt_eur(d.get('savings_eur'))} ({float(d.get('savings_pct') or 0):.0f}%)")
         lines.append("")
-
-    lines.append("LOWEST PRICES RIGHT NOW")
-    lines.append("-" * 44)
-    for c in cheapest:
-        km = f"{int(c['mileage_km']):,} km" if c.get("mileage_km") else ""
-        lines.append(f"  {c['make']} {c['model']} {c.get('year') or ''} {km} -- {_fmt_eur(c.get('price_eur'))}")
-    lines.append("")
 
     lines.append("---")
     lines.append(f"{BASE_URL}/app")
