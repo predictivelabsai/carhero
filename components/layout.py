@@ -4,7 +4,7 @@ from utils.i18n import t, LANGUAGES, get_lang, DEFAULT_LANG
 
 def app_styles():
     return (
-        Link(rel='icon', href='/static/favicon.ico', type='image/x-icon'),
+        Link(rel='icon', href='/static/favicon.svg', type='image/svg+xml'),
         Link(rel='stylesheet', href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=DM+Serif+Display:ital@0;1&display=swap'),
         Script(src='https://cdn.tailwindcss.com'),
         Script("""

@@ -33,6 +33,7 @@ def _head(title: str = "CarHero") -> Head:
     return Head(
         Meta(charset="utf-8"),
         Meta(name="viewport", content="width=device-width, initial-scale=1"),
+        Link(rel="icon", href="/static/favicon.svg", type="image/svg+xml"),
         Title(f"{title} -- CarHero"),
         Link(rel="preconnect", href="https://fonts.googleapis.com"),
         Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin=""),
