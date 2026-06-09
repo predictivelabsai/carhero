@@ -68,6 +68,11 @@ register_analytics_routes(rt)
 from auth.routes import register_auth_routes
 register_auth_routes(rt)
 
+# --- Admin routes ---
+
+from admin.routes import register_admin_routes
+register_admin_routes(rt)
+
 # --- Favorites + Saved Searches + Garage ---
 
 from chat.favorites import register_favorites_routes

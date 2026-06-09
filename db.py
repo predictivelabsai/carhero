@@ -83,10 +83,24 @@ def _init_chat_tables():
         f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS verify_token VARCHAR(64)",
         f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(64)",
         f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ",
+        f"ALTER TABLE {SCHEMA}.chat_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user'",
     ]
+    invitations_ddl = f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.invitations (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        token VARCHAR(64) UNIQUE NOT NULL,
+        invited_by INTEGER REFERENCES {SCHEMA}.chat_users(id),
+        role VARCHAR(20) DEFAULT 'user',
+        message TEXT,
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ,
+        accepted_at TIMESTAMPTZ
+    )"""
     with engine.connect() as conn:
         for stmt in ddl:
             conn.execute(text(stmt))
+        conn.execute(text(invitations_ddl))
         for stmt in alters:
             try:
                 conn.execute(text(stmt))
@@ -99,7 +113,31 @@ def _init_chat_tables():
                 f"INSERT INTO {SCHEMA}.chat_users (id, email, name, password_hash) "
                 f"VALUES (0, 'guest@carhero.chat', 'Guest', 'nologin')"
             ))
+        # Seed admin user
+        _seed_admin(conn)
         conn.commit()
+
+
+def _seed_admin(conn):
+    """Create the default admin user if it doesn't exist."""
+    import bcrypt
+    admin_email = "carehero.admin@predictivelabs.co.uk"
+    admin_pw = "Autod2$2"
+    exists = conn.execute(
+        text(f"SELECT 1 FROM {SCHEMA}.chat_users WHERE email = :email"),
+        {"email": admin_email},
+    ).fetchone()
+    if not exists:
+        pw_hash = bcrypt.hashpw(admin_pw.encode(), bcrypt.gensalt()).decode()
+        conn.execute(text(f"""
+            INSERT INTO {SCHEMA}.chat_users (email, password_hash, name, is_verified, role)
+            VALUES (:email, :pw, :name, TRUE, 'admin')
+        """), {"email": admin_email, "pw": pw_hash, "name": "CarHero Admin"})
+    else:
+        conn.execute(
+            text(f"UPDATE {SCHEMA}.chat_users SET role = 'admin' WHERE email = :email"),
+            {"email": admin_email},
+        )
 
 
 def _init_car_tables():
