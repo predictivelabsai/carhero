@@ -184,6 +184,7 @@ Use `browser_resize` to switch between them.
 - 50: `.left-pane`
 - 55: `.right-overlay`
 - 60: `.right-pane`
+- 65: `.mobile-menu-btn` (position: fixed, always above right pane)
 - 100: `.signin-overlay`
 
 **Critical CSS:**
@@ -191,12 +192,12 @@ Use `browser_resize` to switch between them.
 - `.artifact-header` needs `flex-shrink: 0`
 - Right pane mobile: `position: fixed; right: -100%` → `right: 0`
 - Left pane mobile: `position: fixed; left: -280px` → `left: 0`
-- Hamburger: `display: none` on desktop, `display: flex` on mobile (40x40)
+- Hamburger: `display: none` on desktop, `display: flex` + `position: fixed` + `z-index: 65` on mobile (40x40, always above right pane)
 
 **JS behavior:**
 - `showArtifact()`: Desktop auto-opens right pane; mobile shows Results FAB only
 - `toggleArtifactPane()`: On mobile also toggles `#right-overlay`
-- `toggleLeftPane()`: Toggles `.left-pane.open` and `.left-overlay.visible`
+- `toggleLeftPane()`: Toggles `.left-pane.open` and `.left-overlay.visible`; also closes right pane if open
 
 ### Verification approach
 
@@ -323,17 +324,17 @@ python -m scripts.scrape_cars --load --all                  # load checkpoints t
 python -m scripts.daily_deals --dry-run                     # preview HTML, don't send
 python -m scripts.daily_deals --to julian@predictivelabs.co.uk  # send to one recipient
 python -m scripts.daily_deals --all                         # send to all opted-in users
-python -m scripts.daily_deals --deals 10 --cheapest 5 --new 8 --drops 8
+python -m scripts.daily_deals --deals 15 --drops 5          # custom counts
 ```
 
 ### Digest sections
 
 | Section | Source | Shows when |
 |---------|--------|------------|
-| New Listings Today | `created_at` within freshness window | New listings found in latest scrape |
 | Price Drops | `price_history` + current price comparison | Prices decreased since last scrape |
 | Best Price Arbitrage | Same make/model with spread across sources | Always (falls back to full catalog) |
-| Lowest Prices Right Now | Cheapest active listings | Always (falls back to full catalog) |
+
+The email uses **stacked cards** (not tables) for mobile-friendly rendering. Each comparison card shows cheapest/expensive prices side-by-side using inline-block divs that wrap naturally on narrow screens. No emojis in headings.
 
 ### Scraper best practices
 
@@ -458,11 +459,9 @@ The nightly pipeline (when `DIGEST_ENABLED=1`) runs at `SCRAPE_HOUR` (default 02
 3. Mark listings not seen in 7 days as `stale`
 4. Send daily deals digest to all opted-in users
 
-The digest has 4 sections drawing from fresh data (last 36h):
-- **New Listings Today**: first-seen listings from overnight scrape
+The digest has 2 sections drawing from fresh data (last 36h):
 - **Price Drops**: listings with reduced prices vs previous scrape (from `price_history`)
-- **Best Price Arbitrage**: same make/model with biggest spread across sources
-- **Lowest Prices Right Now**: cheapest active listings
+- **Best Price Arbitrage**: same make/model with biggest spread across sources (stacked cards with cheapest/expensive side-by-side)
 
 Falls back to full catalog when fresh data is sparse (< 1000 listings).
 Emails sent from `info@carhero.chat` via Postmark, tagged `car-deals`.
@@ -555,7 +554,7 @@ m.logout()
 
 | Project | Section 1 | Section 2 | Section 3 | Section 4 |
 |---------|-----------|-----------|-----------|-----------|
-| CarHero | New listings today | Price drops | Price arbitrage | Lowest prices |
+| CarHero | Price drops | Price arbitrage (stacked cards) | -- | -- |
 | Kanvas | Bidding wars | Value finds | Market movers | Art news |
 | LiquidRound | 10 companies (Tavily + LLM) | Investment theses | Featured deep dive | — |
 

@@ -257,51 +257,37 @@ def build_digest_html(
     # --- Price drops section ---
     drops_html = ""
     if price_drops:
-        rows_html = ""
+        drop_cards = ""
         for d in price_drops:
-            km = f"{int(d['mileage_km']):,} km" if d.get("mileage_km") else "--"
+            km = f"{int(d['mileage_km']):,} km" if d.get("mileage_km") else ""
             src = _source_label(d.get("country"), d.get("provider"))
             deal_url = f"{BASE_URL}/app?deal={quote(d['make'] + ' ' + d['model'])}"
             drop_pct = float(d.get("drop_pct") or 0)
-            rows_html += f"""
-            <tr>
-                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB;">
-                    <a href="{deal_url}" style="{link_style}">
-                        <strong>{d['make']} {d['model']}</strong>
-                        <span style="color:#6B7280; font-size:12px;">
-                            {d.get('variant') or ''} &middot; {d.get('year') or ''} &middot; {km}
-                        </span>
-                    </a>
-                </td>
-                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:right;">
-                    <span style="text-decoration:line-through; color:#9CA3AF; font-size:11px;">{_fmt_eur(d.get('old_price'))}</span><br>
-                    <a href="{deal_url}" style="{link_style} font-family:'Courier New',monospace; font-size:13px; font-weight:600; color:#16A34A;">
-                        {_fmt_eur(d.get('price_eur'))}
-                    </a>
-                </td>
-                <td style="padding:6px 12px; border-bottom:1px solid #E5E7EB; text-align:center;">
-                    <span style="background:#16A34A; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">
-                        &darr;{drop_pct:.0f}%
-                    </span><br>
-                    <span style="font-size:11px; color:#6B7280;">{src}</span>
-                </td>
-            </tr>"""
+            specs = " &middot; ".join(filter(None, [str(d.get("year") or ""), km, d.get("variant") or ""]))
+            drop_cards += f"""
+            <div style="border:1px solid #E5E7EB; border-radius:8px; padding:12px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                    <a href="{deal_url}" style="color:#1A1A1A; text-decoration:none; font-weight:600; font-size:14px;">{d['make']} {d['model']}</a>
+                    <span style="background:#16A34A; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">&darr;{drop_pct:.0f}%</span>
+                </div>
+                <div style="font-size:12px; color:#6B7280; margin-top:2px;">{specs} &middot; {src}</div>
+                <div style="margin-top:6px;">
+                    <span style="font-size:15px; font-weight:700; color:#16A34A;">{_fmt_eur(d.get('price_eur'))}</span>
+                    <span style="text-decoration:line-through; color:#9CA3AF; font-size:12px; margin-left:6px;">{_fmt_eur(d.get('old_price'))}</span>
+                </div>
+            </div>"""
 
         drops_html = f"""
     <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #F59E0B; padding-bottom:6px;">
-            &#x1F4C9; Price Drops
-        </h2>
+        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 4px;">Price Drops</h2>
         <p style="color:#6B7280; font-size:12px; margin:0 0 12px;">
-            Prices reduced since last scrape &mdash; sellers are getting motivated.
+            Prices reduced since last scrape.
         </p>
-        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
-            <tbody>{rows_html}</tbody>
-        </table>
+        {drop_cards}
     </div>"""
 
     # --- Price comparisons section ---
-    deal_rows = ""
+    deal_cards = ""
     for d in comparisons:
         savings_pct = float(d.get("savings_pct") or 0)
         savings_eur = float(d.get("savings_eur") or 0)
@@ -310,46 +296,48 @@ def build_digest_html(
         expensive_src = _source_label(d.get("expensive_country"), d.get("expensive_provider"))
         cheap_url = d.get("cheap_url") or ""
         expensive_url = d.get("expensive_url") or ""
-        cheap_link = f'<a href="{cheap_url}" style="font-size:10px; color:#15803D; text-decoration:underline;">View listing</a>' if cheap_url else ""
-        expensive_link = f'<a href="{expensive_url}" style="font-size:10px; color:#991B1B; text-decoration:underline;">View listing</a>' if expensive_url else ""
+        cheap_link = f'<a href="{cheap_url}" style="font-size:11px; color:#15803D; text-decoration:underline;">View listing</a>' if cheap_url else ""
+        expensive_link = f'<a href="{expensive_url}" style="font-size:11px; color:#991B1B; text-decoration:underline;">View listing</a>' if expensive_url else ""
+        cheap_km = f"{int(d['cheap_km']):,} km" if d.get("cheap_km") else ""
+        exp_km = f"{int(d['expensive_km']):,} km" if d.get("expensive_km") else ""
 
-        deal_rows += f"""
-        <tr>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB;">
-                <strong style="color:#1A1A1A; font-size:14px;">{d['make']} {d['model']}</strong>
-                <span style="color:#6B7280; font-size:12px;">{d.get('year') or ''}</span><br>
-                <span style="font-size:11px; color:#6B7280;">{int(d.get('listing_count') or 0)} listings &middot; {int(d.get('source_count') or 0)} sources</span>
-            </td>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right; background:#F0FDF4;">
-                <span style="font-family:'Courier New',monospace; font-size:13px; font-weight:700; color:#15803D;">
-                    {_fmt_eur(d.get('cheap_price'))}
-                </span><br>
-                <span style="font-size:10px; color:#6B7280;">{cheap_src}</span><br>
+        deal_cards += f"""
+        <div style="border:1px solid #E5E7EB; border-radius:8px; padding:12px; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px;">
+                <div>
+                    <strong style="font-size:14px; color:#1A1A1A;">{d['make']} {d['model']}</strong>
+                    <span style="color:#6B7280; font-size:12px;">{d.get('year') or ''}</span><br>
+                    <span style="font-size:11px; color:#9CA3AF;">{int(d.get('listing_count') or 0)} listings &middot; {int(d.get('source_count') or 0)} sources</span>
+                </div>
+                <span style="background:{badge_color}; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600; white-space:nowrap;">
+                    Save {_fmt_eur(savings_eur)} ({savings_pct:.0f}%)
+                </span>
+            </div>
+            <!--[if mso]><table width="100%"><tr><td width="48%" valign="top"><![endif]-->
+            <div style="display:inline-block; width:48%; vertical-align:top; min-width:140px; background:#F0FDF4; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
+                <div style="font-size:10px; color:#16A34A; font-weight:600; text-transform:uppercase;">Cheapest</div>
+                <div style="font-size:15px; font-weight:700; color:#15803D;">{_fmt_eur(d.get('cheap_price'))}</div>
+                <div style="font-size:11px; color:#6B7280;">{cheap_src}{(' &middot; ' + cheap_km) if cheap_km else ''}</div>
                 {cheap_link}
-            </td>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:right; background:#FEF2F2;">
-                <span style="font-family:'Courier New',monospace; font-size:13px; font-weight:700; color:#991B1B;">
-                    {_fmt_eur(d.get('expensive_price'))}
-                </span><br>
-                <span style="font-size:10px; color:#6B7280;">{expensive_src}</span><br>
+            </div>
+            <!--[if mso]></td><td width="4%"></td><td width="48%" valign="top"><![endif]-->
+            <div style="display:inline-block; width:48%; vertical-align:top; min-width:140px; background:#FEF2F2; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
+                <div style="font-size:10px; color:#DC2626; font-weight:600; text-transform:uppercase;">Most Expensive</div>
+                <div style="font-size:15px; font-weight:700; color:#991B1B;">{_fmt_eur(d.get('expensive_price'))}</div>
+                <div style="font-size:11px; color:#6B7280;">{expensive_src}{(' &middot; ' + exp_km) if exp_km else ''}</div>
                 {expensive_link}
-            </td>
-            <td style="padding:10px 12px; border-bottom:1px solid #E5E7EB; text-align:center;">
-                <span style="background:{badge_color}; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">
-                    {savings_pct:.0f}%
-                </span><br>
-                <span style="font-size:11px; color:#16A34A; font-weight:600;">Save {_fmt_eur(savings_eur)}</span>
-            </td>
-        </tr>"""
+            </div>
+            <!--[if mso]></td></tr></table><![endif]-->
+        </div>"""
 
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0; padding:0; background:#F5F5F5; font-family:'Inter','Helvetica Neue',Arial,sans-serif;">
-<div style="max-width:680px; margin:0 auto; padding:24px 16px;">
+<body style="margin:0; padding:0; background:#F5F5F5; font-family:'Inter','Helvetica Neue',Arial,sans-serif; -webkit-text-size-adjust:100%;">
+<div style="max-width:600px; margin:0 auto; padding:20px 12px;">
 
     <!-- Header -->
-    <div style="text-align:center; padding:20px 0 24px;">
+    <div style="text-align:center; padding:16px 0 20px;">
         <h1 style="color:#1A1A1A; font-size:22px; font-weight:700; margin:0; letter-spacing:-0.02em;">
             Car<span style="color:#6B7280;">Hero</span>
         </h1>
@@ -362,31 +350,19 @@ def build_digest_html(
 
     <!-- Price Comparisons -->
     <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 12px; border-bottom:2px solid #000000; padding-bottom:6px;">
-            &#x1F4B0; Best Price Arbitrage
-        </h2>
+        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 4px;">Best Price Arbitrage</h2>
         <p style="color:#6B7280; font-size:12px; margin:0 0 12px;">
             Same make &amp; model, different prices across countries and providers.
         </p>
-        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#1A1A1A;">
-            <thead>
-                <tr style="color:#6B7280; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">
-                    <th style="padding:6px 12px; text-align:left;">Car</th>
-                    <th style="padding:6px 12px; text-align:right;">Cheapest</th>
-                    <th style="padding:6px 12px; text-align:right;">Most Expensive</th>
-                    <th style="padding:6px 12px; text-align:center;">Savings</th>
-                </tr>
-            </thead>
-            <tbody>
-                {deal_rows if deal_rows else '<tr><td colspan="4" style="padding:16px; text-align:center; color:#6B7280;">No price differences found yet.</td></tr>'}
-            </tbody>
-        </table>
+        {deal_cards if deal_cards else '<p style="padding:16px; text-align:center; color:#6B7280;">No price differences found yet.</p>'}
     </div>
 
     <!-- Footer -->
-    <div style="text-align:center; padding:20px 0; border-top:1px solid #E5E7EB; margin-top:12px;">
+    <div style="text-align:center; padding:16px 0; border-top:1px solid #E5E7EB; margin-top:8px;">
         <p style="color:#6B7280; font-size:12px; margin:0 0 4px;">
             <a href="{BASE_URL}/app" style="color:#000000; text-decoration:none; font-weight:600;">Open CarHero</a>
+            &nbsp;&middot;&nbsp;
+            <a href="{BASE_URL}/app/daily-scan" style="color:#000000; text-decoration:none;">Daily Scan</a>
             &nbsp;&middot;&nbsp;
             <a href="{BASE_URL}/app/market-map" style="color:#000000; text-decoration:none;">Market Map</a>
         </p>
