@@ -238,3 +238,20 @@ brands:
       bilbasen: ferrari
       finn: "778"
       donedeal: Ferrari
+
+  - name: Corvette
+    featured: false
+    slugs:
+      autoscout24: corvette
+      theparking: corvette
+      mobile_de: "5900"
+      autotrader: Corvette
+      blocket: Corvette
+      otomoto: corvette
+      standvirtual: corvette
+      autovit: corvette
+      coches: corvette
+      marktplaats: corvette
+      nettiauto: corvette
+      bilbasen: corvette
+      donedeal: Corvette
