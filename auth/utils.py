@@ -102,7 +102,7 @@ def send_invite_email(email: str, token: str, inviter_name: str = "", message: s
       Join CarHero
     </a>
     <p style="color:#9CA3AF;font-size:12px;margin:24px 0 0;">
-      This invitation expires in 7 days. If you weren't expecting this, you can ignore this email.
+      If you weren't expecting this, you can safely ignore this email.
     </p>
   </div>
   <p style="text-align:center;color:#9CA3AF;font-size:11px;margin:16px 0 0;">
@@ -119,7 +119,7 @@ def send_invite_email(email: str, token: str, inviter_name: str = "", message: s
             f"You've been invited{invited_by} to join CarHero!\n\n"
             f"{('Message: ' + message + chr(10) + chr(10)) if message else ''}"
             f"Join here: {join_url}\n\n"
-            f"This invitation expires in 7 days."
+            f"If you weren't expecting this, you can safely ignore this email."
         ),
         tag="invite",
     )

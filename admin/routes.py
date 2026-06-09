@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fasthtml.common import (
     Html, Head, Body, Div, H1, H2, H3, P, A, Button, Form, Input, Label,
@@ -267,7 +267,6 @@ async function sendInvite(e) {
                 return JSONResponse({"error": "An invitation is already pending for this email"}, status_code=409)
 
             token = generate_token()
-            expires = datetime.utcnow() + timedelta(days=7)
 
             inviter = db.execute(
                 text(f"SELECT name FROM {SCHEMA}.chat_users WHERE id = :id"),
@@ -276,11 +275,11 @@ async function sendInvite(e) {
             inviter_name = inviter.name if inviter and inviter.name else ""
 
             db.execute(text(f"""
-                INSERT INTO {SCHEMA}.invitations (email, token, invited_by, role, message, status, expires_at)
-                VALUES (:email, :token, :uid, :role, :msg, 'pending', :expires)
+                INSERT INTO {SCHEMA}.invitations (email, token, invited_by, role, message, status)
+                VALUES (:email, :token, :uid, :role, :msg, 'pending')
             """), {
                 "email": email, "token": token, "uid": uid,
-                "role": role, "msg": message or None, "expires": expires,
+                "role": role, "msg": message or None,
             })
             db.commit()
         finally:
@@ -304,23 +303,8 @@ async function sendInvite(e) {
 
         if not inv:
             return Html(_head("Invitation"), Body(
-                Div(H2("Invalid or expired invitation"),
+                Div(H2("Invalid invitation"),
                     P("This invitation link is no longer valid. Please ask for a new one."),
-                    A("Go to CarHero", href="/app", cls="text-black font-semibold"),
-                    cls="max-w-md mx-auto mt-20 text-center"),
-                cls="bg-white font-sans min-h-screen",
-            ))
-
-        if inv.expires_at and inv.expires_at.replace(tzinfo=None) < datetime.utcnow():
-            db = _get_db()
-            try:
-                db.execute(text(f"UPDATE {SCHEMA}.invitations SET status = 'expired' WHERE id = :id"), {"id": inv.id})
-                db.commit()
-            finally:
-                db.close()
-            return Html(_head("Invitation Expired"), Body(
-                Div(H2("This invitation has expired"),
-                    P("Please ask for a new invitation."),
                     A("Go to CarHero", href="/app", cls="text-black font-semibold"),
                     cls="max-w-md mx-auto mt-20 text-center"),
                 cls="bg-white font-sans min-h-screen",
@@ -390,11 +374,6 @@ async function sendInvite(e) {
 
             if not inv:
                 return RedirectResponse("/app", status_code=303)
-
-            if inv.expires_at and inv.expires_at.replace(tzinfo=None) < datetime.utcnow():
-                db.execute(text(f"UPDATE {SCHEMA}.invitations SET status = 'expired' WHERE id = :id"), {"id": inv.id})
-                db.commit()
-                return RedirectResponse(f"/auth/invite/{token}", status_code=303)
 
             pw_hash = hash_password(password)
             result = db.execute(text(f"""
