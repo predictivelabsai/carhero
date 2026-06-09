@@ -8,9 +8,10 @@ URL patterns:
     Browse: https://collectingcars.com/buy?refinementList[listingStage]=live
     Detail: https://collectingcars.com/for-sale/{slug}
 
-The browse page shows ~40 live auctions via Algolia InstantSearch. We extract
-listing data (title, price, currency, steering, location) from the browse cards.
-Detail pages are blocked by Cloudflare after the initial browse page load.
+The browse page shows ~40 live auctions per page via Algolia InstantSearch,
+paginated across ~6 pages (~220 total). We use a fresh browser per page to
+bypass Cloudflare rate-limiting and extract title, price, currency, LHD/RHD,
+and location from the cards.
 """
 
 from __future__ import annotations
@@ -278,8 +279,31 @@ def _is_target_brand(title: str) -> bool:
     return False
 
 
+def _scrape_page(page_num: int, headless: bool) -> list[dict]:
+    """Scrape a single browse page. Uses a fresh browser to bypass Cloudflare."""
+    pw, browser, ctx, page = setup_browser(headless=headless)
+    try:
+        url = BROWSE_URL + (f"&page={page_num}" if page_num > 1 else "")
+        safe_navigate(page, url, timeout=30000)
+        time.sleep(3)
+        dismiss_cookies(page)
+        time.sleep(1)
+
+        if "Just a moment" in (page.title() or ""):
+            log.warning("Cloudflare blocked page %d", page_num)
+            return []
+
+        return _extract_browse_listings(page)
+    finally:
+        browser.close()
+        pw.stop()
+
+
 def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
     """Scrape Collecting Cars live auction listings.
+
+    Paginates through all browse pages (fresh browser per page to bypass
+    Cloudflare). Each page has ~40 listings; typically 6 pages total (~220).
 
     Args:
         headless: Run browser in headless mode.
@@ -289,114 +313,95 @@ def scrape(headless: bool = True, limit: int = 0, brand: str | None = None):
     listings = load_checkpoint("collectingcars")
     seen_urls = {l.get("source_url") for l in listings if l.get("source_url")}
 
-    pw, browser, ctx, page = setup_browser(headless=headless)
+    raw_items = []
+    max_pages = 10
 
-    try:
-        log.info("Navigating to Collecting Cars browse page...")
-        safe_navigate(page, BROWSE_URL, timeout=30000)
-        time.sleep(3)
+    for pg in range(1, max_pages + 1):
+        log.info("Fetching browse page %d...", pg)
+        page_items = _scrape_page(pg, headless)
+        log.info("Page %d: %d listing cards", pg, len(page_items))
 
-        dismiss_cookies(page)
-        time.sleep(1)
+        if not page_items:
+            break
+        raw_items.extend(page_items)
+        time.sleep(2)
 
-        # Scroll to load all listings (Algolia infinite scroll)
-        prev_count = 0
-        for i in range(30):
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(1.0)
-            cur = page.evaluate("document.querySelectorAll('.ais-InfiniteHits-item').length")
-            if cur == prev_count and i > 5:
+    log.info("Total listing cards across all pages: %d", len(raw_items))
+
+    new_count = 0
+    brand_counts = {}
+
+    for raw in raw_items:
+        title = raw.get("title", "")
+
+        if "Number Plate" in title or "number plate" in title.lower():
+            continue
+        if not re.match(r"^\d{4}\s", title):
+            continue
+
+        if brand:
+            if brand.lower() not in title.lower():
+                continue
+        elif not _is_target_brand(title):
+            continue
+
+        src = raw.get("source_url", "")
+        if src in seen_urls:
+            continue
+
+        year, make, model, variant = _parse_title(title)
+        price_original, currency, price_eur = _parse_price_and_currency(raw.get("price_text", ""))
+        city, country = _parse_location(raw.get("location", ""))
+        steering = raw.get("steering", "")
+
+        make_lower = make.lower()
+        matched_brand = None
+        for b in PREMIUM_BRANDS:
+            if b.lower() == make_lower or b.lower() in make_lower:
+                matched_brand = b
                 break
-            prev_count = cur
-            if i % 10 == 9:
-                log.info("Scrolling... %d items loaded so far", cur)
+        if not matched_brand:
+            matched_brand = make
 
-        log.info("Extracting listing cards...")
-        raw_items = _extract_browse_listings(page)
-        log.info("Found %d listing cards on browse page", len(raw_items))
-
-        new_count = 0
-        brand_counts = {}
-
-        for raw in raw_items:
-            title = raw.get("title", "")
-
-            # Skip non-car listings (number plates, memorabilia)
-            if "Number Plate" in title or "number plate" in title.lower():
-                continue
-            if not re.match(r"^\d{4}\s", title):
+        if limit:
+            bc = brand_counts.get(matched_brand, 0)
+            if bc >= limit:
                 continue
 
-            # Filter to our tracked brands
-            if brand:
-                if brand.lower() not in title.lower():
-                    continue
-            elif not _is_target_brand(title):
-                continue
+        listing = {
+            "provider": "collectingcars",
+            "make": matched_brand,
+            "model": model,
+            "variant": variant or None,
+            "price": price_original,
+            "price_eur": price_eur,
+            "price_original": price_original,
+            "currency": currency,
+            "year": year,
+            "mileage_km": None,
+            "fuel_type": None,
+            "transmission": None,
+            "body_type": None,
+            "power_hp": None,
+            "power_kw": None,
+            "country": country,
+            "city": city,
+            "seller_type": "auction",
+            "seller_name": "Collecting Cars",
+            "steering_side": steering or None,
+            "source_url": src,
+            "image_urls": raw.get("image_urls") or [],
+            "condition": "used",
+            "listing_type": raw.get("listing_type", "Auction"),
+            "no_reserve": raw.get("no_reserve", False),
+        }
+        listings.append(listing)
+        seen_urls.add(src)
+        new_count += 1
+        brand_counts[matched_brand] = brand_counts.get(matched_brand, 0) + 1
 
-            src = raw.get("source_url", "")
-            if src in seen_urls:
-                continue
-
-            year, make, model, variant = _parse_title(title)
-            price_original, currency, price_eur = _parse_price_and_currency(raw.get("price_text", ""))
-            city, country = _parse_location(raw.get("location", ""))
-            steering = raw.get("steering", "")
-
-            # Normalize make to match our brand list
-            make_lower = make.lower()
-            matched_brand = None
-            for b in PREMIUM_BRANDS:
-                if b.lower() == make_lower or b.lower() in make_lower:
-                    matched_brand = b
-                    break
-            if not matched_brand:
-                matched_brand = make
-
-            if limit:
-                bc = brand_counts.get(matched_brand, 0)
-                if bc >= limit:
-                    continue
-
-            listing = {
-                "provider": "collectingcars",
-                "make": matched_brand,
-                "model": model,
-                "variant": variant or None,
-                "price": price_original,
-                "price_eur": price_eur,
-                "price_original": price_original,
-                "currency": currency,
-                "year": year,
-                "mileage_km": None,
-                "fuel_type": None,
-                "transmission": None,
-                "body_type": None,
-                "power_hp": None,
-                "power_kw": None,
-                "country": country,
-                "city": city,
-                "seller_type": "auction",
-                "seller_name": "Collecting Cars",
-                "steering_side": steering or None,
-                "source_url": src,
-                "image_urls": raw.get("image_urls") or [],
-                "condition": "used",
-                "listing_type": raw.get("listing_type", "Auction"),
-                "no_reserve": raw.get("no_reserve", False),
-            }
-            listings.append(listing)
-            seen_urls.add(src)
-            new_count += 1
-            brand_counts[matched_brand] = brand_counts.get(matched_brand, 0) + 1
-
-        log.info("[collectingcars] Extracted %d new listings from browse page", new_count)
-        listings = deduplicate(listings)
-        save_checkpoint(listings, "collectingcars")
-        log.info("Collecting Cars scrape complete: %d listings total (%d new)", len(listings), new_count)
-
-    finally:
-        browser.close()
-        pw.stop()
+    listings = deduplicate(listings)
+    save_checkpoint(listings, "collectingcars")
+    log.info("Collecting Cars scrape complete: %d listings total (%d new)", len(listings), new_count)
 
     return listings
