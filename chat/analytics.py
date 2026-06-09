@@ -43,7 +43,7 @@ carhero.car_listings (
     first_registration_date DATE, owners_count INTEGER,
     accident_free BOOLEAN, service_history BOOLEAN,
     features JSONB, equipment_packages JSONB,
-    source_url VARCHAR(500) UNIQUE, provider VARCHAR(50) ('autotrader','mobile_de','autoscout24','autohero','theparking','auto24_ee','auto24_lt','auto24_lv','blocket','otomoto','coches','marktplaats','nettiauto','bilbasen','donedeal','finn','standvirtual','autovit'),
+    source_url VARCHAR(500) UNIQUE, provider VARCHAR(50) ('autotrader','mobile_de','autoscout24','autohero','theparking','auto24_ee','auto24_lt','auto24_lv','blocket','otomoto','coches','marktplaats','nettiauto','bilbasen','donedeal','finn','standvirtual','autovit','collectingcars'),
     country VARCHAR(5) ('GB','DE','SE','PL','ES','NL','FI','DK','IE','NO','PT','RO','EE','LT','LV','EU'), city VARCHAR(100),
     seller_type VARCHAR(20) ('dealer','private'), seller_name VARCHAR(200),
     listed_date DATE, scraped_at TIMESTAMPTZ,
@@ -51,7 +51,7 @@ carhero.car_listings (
     status VARCHAR(20) ('active','sold','expired'),
     created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
 )
--- Premium/luxury car listings from 18 European marketplaces across 17+ countries.
+-- Premium/luxury car listings from 19 European marketplaces across 17+ countries.
 -- Brands: BMW, Mercedes-Benz, Audi, Porsche, Jaguar, Land Rover, Volvo, Tesla, Lexus, Maserati, Alfa Romeo, Ferrari, Corvette.
 -- All prices in EUR. Mileage in km.
 

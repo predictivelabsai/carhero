@@ -25,7 +25,7 @@ PROVIDERS = [
     "autoscout24", "autotrader", "mobile_de", "autohero", "theparking",
     "auto24_ee", "auto24_lt", "auto24_lv", "blocket", "coches", "bilbasen",
     "nettiauto", "donedeal", "marktplaats", "otomoto", "standvirtual",
-    "autovit", "finn",
+    "autovit", "finn", "collectingcars",
 ]
 
 
@@ -66,6 +66,8 @@ def get_scraper(provider: str):
         from scripts.scrapers.autovit import scrape
     elif provider == "finn":
         from scripts.scrapers.finn import scrape
+    elif provider == "collectingcars":
+        from scripts.scrapers.collectingcars import scrape
     else:
         raise ValueError(f"Unknown provider: {provider}")
     return scrape

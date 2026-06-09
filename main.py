@@ -91,7 +91,7 @@ SCRAPE_PROVIDERS = [
     "autoscout24", "autotrader", "autohero", "mobile_de", "theparking",
     "auto24_ee", "auto24_lt", "auto24_lv", "blocket",
     "otomoto", "coches", "marktplaats", "nettiauto", "bilbasen",
-    "donedeal", "finn", "standvirtual", "autovit",
+    "donedeal", "finn", "standvirtual", "autovit", "collectingcars",
 ]
 
 
