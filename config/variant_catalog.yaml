@@ -313,3 +313,104 @@ variants:
     match_keywords: ["MC20"]
     exclude_keywords: []
     clean_level: high
+
+  # ── Tesla ────────────────────────────────────────────────────────────
+
+  - make: Tesla
+    model_pattern: "^Model 3"
+    canonical_label: "Tesla Model 3 Performance"
+    generation: null
+    year_range: [2018, 2026]
+    match_keywords: ["Performance"]
+    exclude_keywords: []
+    clean_level: medium
+
+  - make: Tesla
+    model_pattern: "^Model 3"
+    canonical_label: "Tesla Model 3 Long Range"
+    generation: null
+    year_range: [2017, 2026]
+    match_keywords: ["Long Range"]
+    exclude_keywords: ["Performance"]
+    clean_level: medium
+
+  - make: Tesla
+    model_pattern: "^Model 3"
+    canonical_label: "Tesla Model 3 Standard"
+    generation: null
+    year_range: [2017, 2026]
+    match_keywords: ["Standard"]
+    exclude_keywords: ["Long Range", "Performance"]
+    clean_level: medium
+
+  - make: Tesla
+    model_pattern: "^Model Y"
+    canonical_label: "Tesla Model Y Performance"
+    generation: null
+    year_range: [2020, 2026]
+    match_keywords: ["Performance"]
+    exclude_keywords: []
+    clean_level: medium
+
+  - make: Tesla
+    model_pattern: "^Model Y"
+    canonical_label: "Tesla Model Y Long Range"
+    generation: null
+    year_range: [2020, 2026]
+    match_keywords: ["Long Range"]
+    exclude_keywords: ["Performance"]
+    clean_level: medium
+
+  - make: Tesla
+    model_pattern: "^Model S"
+    canonical_label: "Tesla Model S Plaid"
+    generation: null
+    year_range: [2021, 2026]
+    match_keywords: ["Plaid"]
+    exclude_keywords: []
+    clean_level: high
+
+  - make: Tesla
+    model_pattern: "^Model S"
+    canonical_label: "Tesla Model S Long Range"
+    generation: null
+    year_range: [2012, 2026]
+    match_keywords: ["Long Range"]
+    exclude_keywords: ["Plaid"]
+    clean_level: medium
+
+  - make: Tesla
+    model_pattern: "^Model X"
+    canonical_label: "Tesla Model X Plaid"
+    generation: null
+    year_range: [2021, 2026]
+    match_keywords: ["Plaid"]
+    exclude_keywords: []
+    clean_level: high
+
+  - make: Tesla
+    model_pattern: "^Model X"
+    canonical_label: "Tesla Model X Long Range"
+    generation: null
+    year_range: [2015, 2026]
+    match_keywords: ["Long Range"]
+    exclude_keywords: ["Plaid"]
+    clean_level: medium
+
+  - make: Tesla
+    model_pattern: "^Cybertruck"
+    canonical_label: "Tesla Cybertruck"
+    generation: null
+    year_range: [2023, 2026]
+    match_keywords: ["Cybertruck"]
+    exclude_keywords: []
+    clean_level: high
+
+  - make: Tesla
+    model_pattern: "^Roadster"
+    canonical_label: "Tesla Roadster"
+    generation: null
+    year_range: [2008, 2012]
+    match_keywords: ["Roadster"]
+    exclude_keywords: []
+    clean_level: high

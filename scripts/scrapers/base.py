@@ -392,10 +392,23 @@ def listing_to_db_row(listing: dict) -> dict:
             if year is None:
                 year = reg_year
 
+    make = _clean(listing.get("make"), 100) or "Unknown"
+    model = _clean(listing.get("model"), 100) or "Unknown"
+    variant = _clean(listing.get("variant"), 200)
+
+    # Tesla: many providers split "Model 3" into model="Model" variant="3 ..."
+    if make == "Tesla" and model and model.lower() in ("model", "models"):
+        if variant:
+            for prefix, full in [("3", "Model 3"), ("Y", "Model Y"), ("S", "Model S"), ("X", "Model X")]:
+                if variant.startswith(prefix):
+                    model = full
+                    variant = variant[len(prefix):].strip() or None
+                    break
+
     row = {
-        "make": _clean(listing.get("make"), 100) or "Unknown",
-        "model": _clean(listing.get("model"), 100) or "Unknown",
-        "variant": _clean(listing.get("variant"), 200),
+        "make": make,
+        "model": model,
+        "variant": variant,
         "generation": _clean(listing.get("generation"), 100),
         "price_eur": price_eur,
         "price_original": price_original,
