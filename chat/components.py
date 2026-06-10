@@ -284,6 +284,8 @@ def center_pane(messages=None, current_agent_slug=None, lang: str = "en"):
                id="agent-prompts-data", type="application/json"),
         Script(json.dumps({a.slug: a.name for a in AGENTS}),
                id="agent-names-data", type="application/json"),
+        Script(json.dumps({a.prefix.rstrip(":"): a.slug for a in AGENTS if a.prefix}),
+               id="agent-prefix-map", type="application/json"),
         cls="center-pane",
     )
 

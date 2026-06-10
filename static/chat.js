@@ -10,6 +10,7 @@
 
     const AGENT_PROMPTS = readJsonScript("agent-prompts-data") || {};
     const AGENT_NAMES = readJsonScript("agent-names-data") || {};
+    const AGENT_PREFIX_MAP = readJsonScript("agent-prefix-map") || {};
 
     function readJsonScript(id) {
         const el = document.getElementById(id);
@@ -475,6 +476,14 @@
         ta.value = text;
         ta.focus();
         autoResize(ta);
+        const prefix = text.trim().replace(/:.*/, "").toLowerCase();
+        const slug = AGENT_PREFIX_MAP[prefix];
+        if (slug) {
+            currentAgentSlug = slug;
+            const label = $("#current-agent-label");
+            if (label) label.textContent = AGENT_NAMES[slug] || slug;
+            updateSampleCards(slug);
+        }
     };
     window.newChat = () => { window.location.href = "/app"; };
     const _checkSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
