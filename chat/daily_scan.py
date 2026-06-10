@@ -262,15 +262,18 @@ _PAGE_JS = """
         }
 
         const allComparisons = (data.comparisons || []).sort((a,b) => (b.savings_eur||0) - (a.savings_eur||0));
+        const allVariants = (data.variant_comparisons || []).sort((a,b) => (b.savings_eur||0) - (a.savings_eur||0));
 
-        // Build filter bar
-        if (allComparisons.length) {
-            const makes = [...new Set(allComparisons.map(d => d.make))].sort();
+        // Build filter bar from both sections
+        if (allComparisons.length || allVariants.length) {
+            const compMakes = allComparisons.map(d => d.make);
+            const varMakes = allVariants.map(d => d.make);
+            const makes = [...new Set([...compMakes, ...varMakes])].sort();
             const years = [...new Set(allComparisons.map(d => d.year).filter(Boolean))].sort((a,b) => b-a);
 
             el('scan-filters').innerHTML =
                 '<div class="scan-filters-grid">' +
-                    '<input id="f-search" type="text" placeholder="Search make or model..." class="f-search-full">' +
+                    '<input id="f-search" type="text" placeholder="Search make, model, or variant..." class="f-search-full">' +
                     '<select id="f-make"><option value="">All makes</option>' +
                         makes.map(m => '<option value="' + m + '">' + m + '</option>').join('') + '</select>' +
                     '<select id="f-year"><option value="">All years</option>' +
@@ -293,7 +296,7 @@ _PAGE_JS = """
                 const year = el('f-year').value;
                 const gap = Number(el('f-gap').value) || 0;
 
-                const filtered = allComparisons.filter(d => {
+                const filteredComps = allComparisons.filter(d => {
                     if (make && d.make !== make) return false;
                     if (year && String(d.year) !== year) return false;
                     if (gap && (d.savings_eur || 0) < gap) return false;
@@ -304,8 +307,21 @@ _PAGE_JS = """
                     return true;
                 });
 
-                renderComparisons(filtered);
-                el('filter-count').textContent = filtered.length + ' of ' + allComparisons.length + ' results';
+                const filteredVariants = allVariants.filter(d => {
+                    if (make && d.make !== make) return false;
+                    if (gap && (d.savings_eur || 0) < gap) return false;
+                    if (q) {
+                        const hay = (d.canonical_variant + ' ' + d.make).toLowerCase();
+                        if (!hay.includes(q)) return false;
+                    }
+                    return true;
+                });
+
+                renderComparisons(filteredComps);
+                renderVariants(filteredVariants);
+                const total = allComparisons.length + allVariants.length;
+                const shown = filteredComps.length + filteredVariants.length;
+                el('filter-count').textContent = shown + ' of ' + total + ' results';
             }
 
             el('f-search').addEventListener('input', applyFilters);
@@ -357,35 +373,13 @@ _PAGE_JS = """
             }).join('');
         }
 
-        // Initial render
-        if (allComparisons.length) {
-            renderComparisons(allComparisons);
-            el('filter-count').textContent = allComparisons.length + ' results';
-        }
-
-        // Price drops
-        if (data.price_drops && data.price_drops.length) {
-            el('drops-section').style.display = 'block';
-            el('price-drops').innerHTML = data.price_drops.map(d => {
-                const km = kmLabel(d.mileage_km);
-                const yr = d.year || '';
-                const src = srcLabel(d.country, d.provider);
-                const url = viewLink(d.source_url);
-                return '<div class="scan-drop-card">' +
-                    '<div><strong>' + d.make + ' ' + d.model + '</strong> ' + (d.variant||'') +
-                    '<br><span style="font-size:12px;color:#6B7280;">' + yr + (yr && km ? ' \\u00B7 ' : '') + km + ' \\u00B7 ' + src + '</span></div>' +
-                    '<div style="text-align:right;">' + fmtEur(d.price_eur) +
-                    '<br><span style="text-decoration:line-through;color:#9CA3AF;font-size:11px;">' + fmtEur(d.old_price) + '</span>' +
-                    ' <span style="color:#16A34A;font-size:12px;font-weight:600;">\\u2193' + (d.drop_pct||0).toFixed(0) + '%</span>' +
-                    '<br>' + url + '</div></div>';
-            }).join('');
-        }
-
-        // Variant comparisons
-        const variants = data.variant_comparisons || [];
-        if (variants.length) {
+        function renderVariants(items) {
+            if (!items.length) {
+                el('variant-section').style.display = 'none';
+                return;
+            }
             el('variant-section').style.display = 'block';
-            el('variant-list').innerHTML = variants.map(d => {
+            el('variant-list').innerHTML = items.map(d => {
                 const pct = d.savings_pct || 0;
                 const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
                 const cheapKm = kmLabel(d.cheap_km);
@@ -419,8 +413,34 @@ _PAGE_JS = """
             }).join('');
         }
 
+        // Initial render
+        renderVariants(allVariants);
+        renderComparisons(allComparisons);
+        const totalResults = allComparisons.length + allVariants.length;
+        if (totalResults) {
+            el('filter-count').textContent = totalResults + ' results';
+        }
+
+        // Price drops
+        if (data.price_drops && data.price_drops.length) {
+            el('drops-section').style.display = 'block';
+            el('price-drops').innerHTML = data.price_drops.map(d => {
+                const km = kmLabel(d.mileage_km);
+                const yr = d.year || '';
+                const src = srcLabel(d.country, d.provider);
+                const url = viewLink(d.source_url);
+                return '<div class="scan-drop-card">' +
+                    '<div><strong>' + d.make + ' ' + d.model + '</strong> ' + (d.variant||'') +
+                    '<br><span style="font-size:12px;color:#6B7280;">' + yr + (yr && km ? ' \\u00B7 ' : '') + km + ' \\u00B7 ' + src + '</span></div>' +
+                    '<div style="text-align:right;">' + fmtEur(d.price_eur) +
+                    '<br><span style="text-decoration:line-through;color:#9CA3AF;font-size:11px;">' + fmtEur(d.old_price) + '</span>' +
+                    ' <span style="color:#16A34A;font-size:12px;font-weight:600;">\\u2193' + (d.drop_pct||0).toFixed(0) + '%</span>' +
+                    '<br>' + url + '</div></div>';
+            }).join('');
+        }
+
         // If nothing at all
-        if (!allComparisons.length && !data.price_drops?.length && !variants.length) {
+        if (!allComparisons.length && !data.price_drops?.length && !allVariants.length) {
             el('scan-loading').style.display = 'block';
             el('scan-loading').textContent = 'No scan data available yet. Deals appear after the nightly scrape runs.';
         }
