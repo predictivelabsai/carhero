@@ -337,80 +337,114 @@ _PAGE_JS = """
             });
         }
 
+        const PAGE_SIZE = 10;
+        let compPage = 1;
+        let varPage = 1;
+        let currentComps = [];
+        let currentVariants = [];
+
+        function compCard(d) {
+            const pct = d.savings_pct || 0;
+            const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
+            const cheapKm = kmLabel(d.cheap_km);
+            const expKm = kmLabel(d.expensive_km);
+            return '<div class="scan-card">' +
+                '<div class="scan-card-header">' +
+                    '<div><strong style="font-size:14px;">' + d.make + ' ' + d.model + '</strong> <span style="color:#6B7280;font-size:13px;">' + (d.year||'') + '</span>' +
+                    '<br><span style="font-size:11px;color:#9CA3AF;">' + (d.listing_count||0) + ' listings \\u00B7 ' + (d.source_count||0) + ' sources</span></div>' +
+                    '<div><span class="scan-badge" style="background:' + color + ';">Save ' + fmtEur(d.savings_eur) + ' (' + Number(pct).toFixed(0) + '%)</span></div>' +
+                '</div>' +
+                '<div class="scan-card-prices">' +
+                    '<div class="scan-price-box" style="background:#F0FDF4;">' +
+                        '<div style="font-size:10px;color:#16A34A;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Cheapest</div>' +
+                        '<div style="font-size:15px;font-weight:700;color:#15803D;">' + fmtEur(d.cheap_price) + '</div>' +
+                        '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.cheap_country, d.cheap_provider) + (cheapKm ? ' \\u00B7 ' + cheapKm : '') + '</div>' +
+                        '<div style="margin-top:4px;">' + viewLink(d.cheap_url) + '</div>' +
+                    '</div>' +
+                    '<div class="scan-price-box" style="background:#FEF2F2;">' +
+                        '<div style="font-size:10px;color:#DC2626;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Most Expensive</div>' +
+                        '<div style="font-size:15px;font-weight:700;color:#991B1B;">' + fmtEur(d.expensive_price) + '</div>' +
+                        '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.expensive_country, d.expensive_provider) + (expKm ? ' \\u00B7 ' + expKm : '') + '</div>' +
+                        '<div style="margin-top:4px;">' + viewLink(d.expensive_url) + '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function varCard(d) {
+            const pct = d.savings_pct || 0;
+            const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
+            const cheapKm = kmLabel(d.cheap_km);
+            const expKm = kmLabel(d.expensive_km);
+            const cheapYr = d.cheap_year ? String(d.cheap_year) : '';
+            const expYr = d.expensive_year ? String(d.expensive_year) : '';
+            const cheapMeta = [srcLabel(d.cheap_country, d.cheap_provider), cheapYr, cheapKm].filter(Boolean).join(' \\u00B7 ');
+            const expMeta = [srcLabel(d.expensive_country, d.expensive_provider), expYr, expKm].filter(Boolean).join(' \\u00B7 ');
+            return '<div class="scan-card" style="border-color:#DBEAFE;">' +
+                '<div class="scan-card-header">' +
+                    '<div><strong style="font-size:14px;">' + d.canonical_variant + '</strong>' +
+                    ' <span style="display:inline-block;background:#EFF6FF;color:#1D4ED8;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;">Verified</span>' +
+                    '<br><span style="font-size:11px;color:#9CA3AF;">' + (d.listing_count||0) + ' listings \\u00B7 ' + (d.source_count||0) + ' sources \\u00B7 median ' + fmtEur(d.median_price) + '</span></div>' +
+                    '<div><span class="scan-badge" style="background:' + color + ';">Save ' + fmtEur(d.savings_eur) + ' (' + Number(pct).toFixed(0) + '%)</span></div>' +
+                '</div>' +
+                '<div class="scan-card-prices">' +
+                    '<div class="scan-price-box" style="background:#F0FDF4;">' +
+                        '<div style="font-size:10px;color:#16A34A;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Cheapest</div>' +
+                        '<div style="font-size:15px;font-weight:700;color:#15803D;">' + fmtEur(d.cheap_price) + '</div>' +
+                        '<div style="font-size:11px;color:#6B7280;">' + cheapMeta + '</div>' +
+                        '<div style="margin-top:4px;">' + viewLink(d.cheap_url) + '</div>' +
+                    '</div>' +
+                    '<div class="scan-price-box" style="background:#FEF2F2;">' +
+                        '<div style="font-size:10px;color:#DC2626;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Most Expensive</div>' +
+                        '<div style="font-size:15px;font-weight:700;color:#991B1B;">' + fmtEur(d.expensive_price) + '</div>' +
+                        '<div style="font-size:11px;color:#6B7280;">' + expMeta + '</div>' +
+                        '<div style="margin-top:4px;">' + viewLink(d.expensive_url) + '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function moreBtn(id, shown, total) {
+            if (shown >= total) return '';
+            const rem = total - shown;
+            return '<div style="text-align:center;padding:8px;"><button id="' + id + '" style="padding:8px 24px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;cursor:pointer;background:#F9FAFB;">Show more (' + rem + ' remaining)</button></div>';
+        }
+
         function renderComparisons(items) {
-            if (!items.length) {
+            currentComps = items;
+            compPage = 1;
+            renderCompsPage();
+        }
+        function renderCompsPage() {
+            if (!currentComps.length) {
                 el('comparisons-list').innerHTML = '<div style="text-align:center;color:#9CA3AF;padding:24px;">No matches found.</div>';
                 el('comparisons-section').style.display = 'block';
                 return;
             }
             el('comparisons-section').style.display = 'block';
-            el('comparisons-list').innerHTML = items.map(d => {
-                const pct = d.savings_pct || 0;
-                const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
-                const cheapKm = kmLabel(d.cheap_km);
-                const expKm = kmLabel(d.expensive_km);
-                return '<div class="scan-card">' +
-                    '<div class="scan-card-header">' +
-                        '<div><strong style="font-size:14px;">' + d.make + ' ' + d.model + '</strong> <span style="color:#6B7280;font-size:13px;">' + (d.year||'') + '</span>' +
-                        '<br><span style="font-size:11px;color:#9CA3AF;">' + (d.listing_count||0) + ' listings \\u00B7 ' + (d.source_count||0) + ' sources</span></div>' +
-                        '<div><span class="scan-badge" style="background:' + color + ';">Save ' + fmtEur(d.savings_eur) + ' (' + Number(pct).toFixed(0) + '%)</span></div>' +
-                    '</div>' +
-                    '<div class="scan-card-prices">' +
-                        '<div class="scan-price-box" style="background:#F0FDF4;">' +
-                            '<div style="font-size:10px;color:#16A34A;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Cheapest</div>' +
-                            '<div style="font-size:15px;font-weight:700;color:#15803D;">' + fmtEur(d.cheap_price) + '</div>' +
-                            '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.cheap_country, d.cheap_provider) + (cheapKm ? ' \\u00B7 ' + cheapKm : '') + '</div>' +
-                            '<div style="margin-top:4px;">' + viewLink(d.cheap_url) + '</div>' +
-                        '</div>' +
-                        '<div class="scan-price-box" style="background:#FEF2F2;">' +
-                            '<div style="font-size:10px;color:#DC2626;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Most Expensive</div>' +
-                            '<div style="font-size:15px;font-weight:700;color:#991B1B;">' + fmtEur(d.expensive_price) + '</div>' +
-                            '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.expensive_country, d.expensive_provider) + (expKm ? ' \\u00B7 ' + expKm : '') + '</div>' +
-                            '<div style="margin-top:4px;">' + viewLink(d.expensive_url) + '</div>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
+            const shown = compPage * PAGE_SIZE;
+            const visible = currentComps.slice(0, shown);
+            el('comparisons-list').innerHTML = visible.map(compCard).join('') + moreBtn('comp-more', shown, currentComps.length);
+            const btn = document.getElementById('comp-more');
+            if (btn) btn.addEventListener('click', () => { compPage++; renderCompsPage(); });
         }
 
         function renderVariants(items) {
-            if (!items.length) {
+            currentVariants = items;
+            varPage = 1;
+            renderVarsPage();
+        }
+        function renderVarsPage() {
+            if (!currentVariants.length) {
                 el('variant-section').style.display = 'none';
                 return;
             }
             el('variant-section').style.display = 'block';
-            el('variant-list').innerHTML = items.map(d => {
-                const pct = d.savings_pct || 0;
-                const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
-                const cheapKm = kmLabel(d.cheap_km);
-                const expKm = kmLabel(d.expensive_km);
-                const cheapYr = d.cheap_year ? String(d.cheap_year) : '';
-                const expYr = d.expensive_year ? String(d.expensive_year) : '';
-                const cheapMeta = [srcLabel(d.cheap_country, d.cheap_provider), cheapYr, cheapKm].filter(Boolean).join(' \\u00B7 ');
-                const expMeta = [srcLabel(d.expensive_country, d.expensive_provider), expYr, expKm].filter(Boolean).join(' \\u00B7 ');
-                return '<div class="scan-card" style="border-color:#DBEAFE;">' +
-                    '<div class="scan-card-header">' +
-                        '<div><strong style="font-size:14px;">' + d.canonical_variant + '</strong>' +
-                        ' <span style="display:inline-block;background:#EFF6FF;color:#1D4ED8;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;">Verified</span>' +
-                        '<br><span style="font-size:11px;color:#9CA3AF;">' + (d.listing_count||0) + ' listings \\u00B7 ' + (d.source_count||0) + ' sources \\u00B7 median ' + fmtEur(d.median_price) + '</span></div>' +
-                        '<div><span class="scan-badge" style="background:' + color + ';">Save ' + fmtEur(d.savings_eur) + ' (' + Number(pct).toFixed(0) + '%)</span></div>' +
-                    '</div>' +
-                    '<div class="scan-card-prices">' +
-                        '<div class="scan-price-box" style="background:#F0FDF4;">' +
-                            '<div style="font-size:10px;color:#16A34A;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Cheapest</div>' +
-                            '<div style="font-size:15px;font-weight:700;color:#15803D;">' + fmtEur(d.cheap_price) + '</div>' +
-                            '<div style="font-size:11px;color:#6B7280;">' + cheapMeta + '</div>' +
-                            '<div style="margin-top:4px;">' + viewLink(d.cheap_url) + '</div>' +
-                        '</div>' +
-                        '<div class="scan-price-box" style="background:#FEF2F2;">' +
-                            '<div style="font-size:10px;color:#DC2626;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Most Expensive</div>' +
-                            '<div style="font-size:15px;font-weight:700;color:#991B1B;">' + fmtEur(d.expensive_price) + '</div>' +
-                            '<div style="font-size:11px;color:#6B7280;">' + expMeta + '</div>' +
-                            '<div style="margin-top:4px;">' + viewLink(d.expensive_url) + '</div>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
+            const shown = varPage * PAGE_SIZE;
+            const visible = currentVariants.slice(0, shown);
+            el('variant-list').innerHTML = visible.map(varCard).join('') + moreBtn('var-more', shown, currentVariants.length);
+            const btn = document.getElementById('var-more');
+            if (btn) btn.addEventListener('click', () => { varPage++; renderVarsPage(); });
         }
 
         // Initial render
