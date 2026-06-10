@@ -36,6 +36,12 @@ CATEGORIES: list[dict] = [
         "blurb": "Valuations, comparisons, and personalized buying advice.",
         "icon": "+",
     },
+    {
+        "key": "personal",
+        "name": "Your AI Car Hero",
+        "blurb": "Your personal car advisor who finds deals and pushes you to act.",
+        "icon": "★",
+    },
 ]
 
 
@@ -101,6 +107,19 @@ AGENTS: tuple[AgentSpec, ...] = (
             "advise: best premium estate under 35k for long commutes",
             "advise: first luxury car for a young professional, 30k budget",
             "advise: reliable daily driver, diesel, under 20,000 EUR",
+        ),
+    ),
+    # Personal
+    AgentSpec(
+        slug="kenri", name="Kenri",
+        category="personal", icon="★", prefix="kenri:",
+        one_liner="Your AI Car Hero -- finds deals, drops knowledge, pushes you to act.",
+        description="Personal car advisor with a young commentator voice. Proactively surfaces deals, gives opinionated market takes, and keeps pushing you toward the best buys across 150,000+ European listings.",
+        example_prompts=(
+            "kenri: what's the best Porsche I can get for 100k?",
+            "kenri: any sleeper deals on GT cars right now?",
+            "kenri: I've got 50k and want something that turns heads",
+            "kenri: what should I be buying before prices go up?",
         ),
     ),
 )

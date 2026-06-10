@@ -21,6 +21,8 @@ _SLUG_KEYWORDS: dict[str, list[str]] = {
                     "difference between"],
     "advisor": ["advise", "recommend", "budget", "suggest", "should i buy",
                 "best car", "which car", "help me choose", "daily driver"],
+    "kenri": ["kenri", "car hero", "deal", "sleeper", "what should i buy",
+              "anything good", "hot deal", "best buy", "fire deal"],
 }
 
 
