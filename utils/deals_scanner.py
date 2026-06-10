@@ -167,33 +167,36 @@ def scan_variant_comparisons(limit: int = 25) -> list[dict]:
                   AND canonical_variant IS NOT NULL
                   AND scraped_at > ({cutoff})
             ),
-            with_median AS (
-                SELECT *,
-                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_eur)
-                           OVER (PARTITION BY canonical_variant) AS median_price
+            medians AS (
+                SELECT canonical_variant,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_eur) AS median_price
                 FROM fresh
+                GROUP BY canonical_variant
             ),
             cleaned AS (
-                SELECT * FROM with_median
-                WHERE price_eur < median_price * 5
-                  AND price_eur > median_price * 0.2
+                SELECT f.*
+                FROM fresh f
+                JOIN medians m USING (canonical_variant)
+                WHERE f.price_eur < m.median_price * 5
+                  AND f.price_eur > m.median_price * 0.2
             ),
             grouped AS (
-                SELECT canonical_variant,
-                       MIN(make) AS make,
+                SELECT c.canonical_variant,
+                       MIN(c.make) AS make,
                        COUNT(*) AS listing_count,
-                       COUNT(DISTINCT provider) AS source_count,
-                       ROUND(MIN(price_eur)::numeric, 0) AS min_price,
-                       ROUND(MAX(price_eur)::numeric, 0) AS max_price,
-                       ROUND(AVG(price_eur)::numeric, 0) AS avg_price,
-                       ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_eur)::numeric, 0) AS median_price,
-                       (MAX(price_eur) - MIN(price_eur)) AS savings_eur,
-                       ROUND(((MAX(price_eur) - MIN(price_eur))
-                              / NULLIF(AVG(price_eur), 0) * 100)::numeric, 1) AS savings_pct
-                FROM cleaned
-                GROUP BY canonical_variant
+                       COUNT(DISTINCT c.provider) AS source_count,
+                       ROUND(MIN(c.price_eur)::numeric, 0) AS min_price,
+                       ROUND(MAX(c.price_eur)::numeric, 0) AS max_price,
+                       ROUND(AVG(c.price_eur)::numeric, 0) AS avg_price,
+                       ROUND(m.median_price::numeric, 0) AS median_price,
+                       (MAX(c.price_eur) - MIN(c.price_eur)) AS savings_eur,
+                       ROUND(((MAX(c.price_eur) - MIN(c.price_eur))
+                              / NULLIF(AVG(c.price_eur), 0) * 100)::numeric, 1) AS savings_pct
+                FROM cleaned c
+                JOIN medians m USING (canonical_variant)
+                GROUP BY c.canonical_variant, m.median_price
                 HAVING COUNT(*) >= 2
-                   AND (MAX(price_eur) - MIN(price_eur)) > 500
+                   AND (MAX(c.price_eur) - MIN(c.price_eur)) > 500
             )
             SELECT * FROM grouped
             WHERE savings_pct BETWEEN 3 AND 300
@@ -204,12 +207,15 @@ def scan_variant_comparisons(limit: int = 25) -> list[dict]:
 
         for row in rows:
             cv = row["canonical_variant"]
-            c = db.execute(text("""
+            med = float(row["median_price"])
+            c = db.execute(text(f"""
                 SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type, year
                 FROM carhero.car_listings
                 WHERE canonical_variant = :cv AND status = 'active' AND price_eur > 500
+                  AND price_eur BETWEEN :lo AND :hi
+                  AND scraped_at > ({cutoff})
                 ORDER BY price_eur ASC LIMIT 1
-            """), {"cv": cv}).first()
+            """), {"cv": cv, "lo": med * 0.2, "hi": med * 5}).first()
             if c:
                 row["cheap_price"] = float(c.price_eur)
                 row["cheap_country"] = c.country
@@ -220,12 +226,14 @@ def scan_variant_comparisons(limit: int = 25) -> list[dict]:
                 row["cheap_fuel"] = c.fuel_type
                 row["cheap_year"] = c.year
 
-            p = db.execute(text("""
+            p = db.execute(text(f"""
                 SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type, year
                 FROM carhero.car_listings
                 WHERE canonical_variant = :cv AND status = 'active' AND price_eur > 500
+                  AND price_eur BETWEEN :lo AND :hi
+                  AND scraped_at > ({cutoff})
                 ORDER BY price_eur DESC LIMIT 1
-            """), {"cv": cv}).first()
+            """), {"cv": cv, "lo": med * 0.2, "hi": med * 5}).first()
             if p:
                 row["expensive_price"] = float(p.price_eur)
                 row["expensive_country"] = p.country
