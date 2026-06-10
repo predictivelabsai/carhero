@@ -56,6 +56,13 @@ def register_daily_scan_routes(rt):
                     Div(id="scan-filters", style="display:none",
                         cls="mb-4 p-3 border border-gray-200 rounded-lg"),
                     Div(
+                        H3("Verified Variant Deals", cls="text-base font-semibold mb-1"),
+                        P("Apples-to-apples comparisons for specific car variants.",
+                          cls="text-xs text-gray-500 mb-3"),
+                        Div(id="variant-list", cls="space-y-2 mb-6"),
+                        id="variant-section", style="display:none",
+                    ),
+                    Div(
                         Div(id="filter-count", cls="text-xs text-gray-400 mb-2"),
                         H3("Best Price Arbitrage", cls="text-base font-semibold mb-3"),
                         Div(id="comparisons-list", cls="space-y-2 mb-6"),
@@ -83,11 +90,13 @@ def register_daily_scan_routes(rt):
         from starlette.responses import JSONResponse
         from utils.deals_scanner import (
             scan_price_comparisons, scan_price_drops, scan_freshness_stats,
+            scan_variant_comparisons,
         )
 
         stats = scan_freshness_stats()
         comparisons = scan_price_comparisons(limit=100)
         price_drops = scan_price_drops(limit=15)
+        variant_comparisons = scan_variant_comparisons(limit=25)
 
         def _default(o):
             if isinstance(o, Decimal):
@@ -100,6 +109,7 @@ def register_daily_scan_routes(rt):
             "stats": stats,
             "comparisons": comparisons,
             "price_drops": price_drops,
+            "variant_comparisons": variant_comparisons,
         }, default=_default))
 
         return JSONResponse(raw)
@@ -371,8 +381,42 @@ _PAGE_JS = """
             }).join('');
         }
 
+        // Variant comparisons
+        const variants = data.variant_comparisons || [];
+        if (variants.length) {
+            el('variant-section').style.display = 'block';
+            el('variant-list').innerHTML = variants.map(d => {
+                const pct = d.savings_pct || 0;
+                const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
+                const cheapKm = kmLabel(d.cheap_km);
+                const expKm = kmLabel(d.expensive_km);
+                return '<div class="scan-card">' +
+                    '<div class="scan-card-header">' +
+                        '<div><strong style="font-size:14px;">' + d.canonical_variant + '</strong>' +
+                        ' <span style="display:inline-block;background:#EFF6FF;color:#1D4ED8;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;">Verified</span>' +
+                        '<br><span style="font-size:11px;color:#9CA3AF;">' + (d.listing_count||0) + ' listings \\u00B7 ' + (d.source_count||0) + ' sources \\u00B7 median ' + fmtEur(d.median_price) + '</span></div>' +
+                        '<div><span class="scan-badge" style="background:' + color + ';">Save ' + fmtEur(d.savings_eur) + ' (' + Number(pct).toFixed(0) + '%)</span></div>' +
+                    '</div>' +
+                    '<div class="scan-card-prices">' +
+                        '<div class="scan-price-box" style="background:#F0FDF4;">' +
+                            '<div style="font-size:10px;color:#16A34A;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Cheapest</div>' +
+                            '<div style="font-size:15px;font-weight:700;color:#15803D;">' + fmtEur(d.cheap_price) + '</div>' +
+                            '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.cheap_country, d.cheap_provider) + (cheapKm ? ' \\u00B7 ' + cheapKm : '') + '</div>' +
+                            '<div style="margin-top:4px;">' + viewLink(d.cheap_url) + '</div>' +
+                        '</div>' +
+                        '<div class="scan-price-box" style="background:#FEF2F2;">' +
+                            '<div style="font-size:10px;color:#DC2626;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Most Expensive</div>' +
+                            '<div style="font-size:15px;font-weight:700;color:#991B1B;">' + fmtEur(d.expensive_price) + '</div>' +
+                            '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.expensive_country, d.expensive_provider) + (expKm ? ' \\u00B7 ' + expKm : '') + '</div>' +
+                            '<div style="margin-top:4px;">' + viewLink(d.expensive_url) + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
         // If nothing at all
-        if (!allComparisons.length && !data.price_drops?.length) {
+        if (!allComparisons.length && !data.price_drops?.length && !variants.length) {
             el('scan-loading').style.display = 'block';
             el('scan-loading').textContent = 'No scan data available yet. Deals appear after the nightly scrape runs.';
         }

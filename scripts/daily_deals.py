@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from utils.deals_scanner import (
-    scan_price_comparisons, scan_price_drops,
+    scan_price_comparisons, scan_price_drops, scan_variant_comparisons,
     scan_freshness_stats, build_digest_html, build_digest_text,
 )
 from utils.email import send_email
@@ -77,8 +77,12 @@ def main():
     price_drops = scan_price_drops(limit=args.drops)
     log.info("Found %d price drops", len(price_drops))
 
-    html = build_digest_html(comparisons, price_drops=price_drops, stats=stats)
-    text = build_digest_text(comparisons, price_drops=price_drops, stats=stats)
+    log.info("Scanning variant comparisons...")
+    variant_comps = scan_variant_comparisons(limit=15)
+    log.info("Found %d variant comparisons", len(variant_comps))
+
+    html = build_digest_html(comparisons, price_drops=price_drops, stats=stats, variant_comparisons=variant_comps)
+    text = build_digest_text(comparisons, price_drops=price_drops, stats=stats, variant_comparisons=variant_comps)
 
     now = datetime.now()
     subject = f"CarHero Daily Deals — {now.strftime('%b %d, %Y')}"

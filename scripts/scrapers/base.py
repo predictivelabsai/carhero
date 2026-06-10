@@ -392,7 +392,7 @@ def listing_to_db_row(listing: dict) -> dict:
             if year is None:
                 year = reg_year
 
-    return {
+    row = {
         "make": _clean(listing.get("make"), 100) or "Unknown",
         "model": _clean(listing.get("model"), 100) or "Unknown",
         "variant": _clean(listing.get("variant"), 200),
@@ -437,4 +437,18 @@ def listing_to_db_row(listing: dict) -> dict:
         "image_urls": json.dumps(listing["image_urls"]) if listing.get("image_urls") else None,
         "image_count": len(listing.get("image_urls") or []),
         "status": listing.get("status", "active"),
+        "canonical_variant": None,
     }
+    try:
+        from utils.variant_matcher import match_variant
+        label = match_variant(
+            make=row.get("make", ""),
+            model=row.get("model", ""),
+            variant=row.get("variant"),
+            year=row.get("year"),
+        )
+        if label:
+            row["canonical_variant"] = label
+    except Exception:
+        pass
+    return row

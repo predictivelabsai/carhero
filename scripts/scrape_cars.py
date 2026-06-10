@@ -125,6 +125,7 @@ def load_to_db(provider: str):
                                  SET price_eur = :price_eur,
                                      price_original = :price_original,
                                      mileage_km = COALESCE(:mileage_km, mileage_km),
+                                     canonical_variant = COALESCE(:canonical_variant, canonical_variant),
                                      scraped_at = NOW(),
                                      updated_at = NOW(),
                                      status = 'active'
@@ -133,6 +134,7 @@ def load_to_db(provider: str):
                                 "price_eur": new_price,
                                 "price_original": row.get("price_original"),
                                 "mileage_km": row.get("mileage_km"),
+                                "canonical_variant": row.get("canonical_variant"),
                                 "id": old_id,
                             },
                         )
@@ -162,7 +164,7 @@ def load_to_db(provider: str):
                      features, equipment_packages,
                      source_url, provider, country, city,
                      seller_type, seller_name, listed_date,
-                     image_urls, image_count, status)
+                     image_urls, image_count, status, canonical_variant)
                     VALUES
                     (:make, :model, :variant, :generation,
                      :price_eur, :price_original, :currency,
@@ -176,7 +178,7 @@ def load_to_db(provider: str):
                      :features, :equipment_packages,
                      :source_url, :provider, :country, :city,
                      :seller_type, :seller_name, :listed_date,
-                     :image_urls, :image_count, :status)
+                     :image_urls, :image_count, :status, :canonical_variant)
                 """),
                 row,
             )

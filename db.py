@@ -340,9 +340,25 @@ def _init_car_tables():
         f"CREATE INDEX IF NOT EXISTS idx_garage_cars_user ON {SCHEMA}.garage_cars(user_id)",
         f"CREATE INDEX IF NOT EXISTS idx_user_profiles_user ON {SCHEMA}.user_profiles(user_id)",
     ]
+    alters = [
+        f"ALTER TABLE {SCHEMA}.car_listings ADD COLUMN IF NOT EXISTS canonical_variant VARCHAR(200)",
+    ]
+    alter_indexes = [
+        f"CREATE INDEX IF NOT EXISTS idx_car_listings_canonical_variant ON {SCHEMA}.car_listings(canonical_variant)",
+    ]
     with engine.connect() as conn:
         for stmt in ddl:
             conn.execute(text(stmt))
         for stmt in indexes:
             conn.execute(text(stmt))
+        for stmt in alters:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                pass
+        for stmt in alter_indexes:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                pass
         conn.commit()

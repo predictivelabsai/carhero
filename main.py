@@ -174,16 +174,23 @@ def _start_scrape_and_digest():
 
             print(f"INFO:     [scheduler] === Nightly pipeline starting ===", flush=True)
 
-            print(f"INFO:     [scheduler] Step 1/4: Scraping...", flush=True)
+            print(f"INFO:     [scheduler] Step 1/5: Scraping...", flush=True)
             scraped = _run_scrapers()
 
-            print(f"INFO:     [scheduler] Step 2/4: Loading to DB...", flush=True)
+            print(f"INFO:     [scheduler] Step 2/5: Loading to DB...", flush=True)
             loaded = _load_to_db()
 
-            print(f"INFO:     [scheduler] Step 3/4: Cleaning stale listings...", flush=True)
+            print(f"INFO:     [scheduler] Step 3/5: Enriching variants...", flush=True)
+            try:
+                from scripts.enrich_variants import enrich_listings
+                enrich_listings()
+            except Exception as e:
+                print(f"ERROR:    [scheduler] Variant enrichment failed: {e}", flush=True)
+
+            print(f"INFO:     [scheduler] Step 4/5: Cleaning stale listings...", flush=True)
             _mark_stale()
 
-            print(f"INFO:     [scheduler] Step 4/4: Sending digest...", flush=True)
+            print(f"INFO:     [scheduler] Step 5/5: Sending digest...", flush=True)
             _run_digest()
 
             print(f"INFO:     [scheduler] === Nightly pipeline complete ===", flush=True)

@@ -5,7 +5,7 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-PROVIDERS="autoscout24 autotrader mobile_de autohero theparking auto24_ee auto24_lt auto24_lv blocket"
+PROVIDERS="autoscout24 autotrader mobile_de autohero theparking auto24_ee auto24_lt auto24_lv blocket collectingcars"
 
 for provider in $PROVIDERS; do
     echo ""

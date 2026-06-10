@@ -41,6 +41,7 @@ PROVIDER_LABELS = {
     "finn": "Finn.no",
     "standvirtual": "Standvirtual.com",
     "autovit": "Autovit.ro",
+    "collectingcars": "Collecting Cars",
 }
 
 
@@ -144,6 +145,102 @@ def scan_price_comparisons(limit: int = 25) -> list[dict]:
         db.close()
 
 
+def scan_variant_comparisons(limit: int = 25) -> list[dict]:
+    """Price arbitrage grouped by canonical_variant (verified variant matches).
+
+    Groups listings that matched a curated variant catalog entry, so the
+    comparison is apples-to-apples (e.g., "Porsche 911 GT3 (991)" only).
+    Includes median-based outlier protection.
+    """
+    from db import SessionLocal
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        cutoff = _scrape_cutoff(db)
+        sql = text(f"""
+            WITH fresh AS (
+                SELECT id, make, model, variant, year, price_eur, mileage_km,
+                       country, provider, source_url, fuel_type, canonical_variant
+                FROM carhero.car_listings
+                WHERE status = 'active' AND price_eur > 500
+                  AND canonical_variant IS NOT NULL
+                  AND scraped_at > ({cutoff})
+            ),
+            with_median AS (
+                SELECT *,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_eur)
+                           OVER (PARTITION BY canonical_variant) AS median_price
+                FROM fresh
+            ),
+            cleaned AS (
+                SELECT * FROM with_median
+                WHERE price_eur < median_price * 5
+                  AND price_eur > median_price * 0.2
+            ),
+            grouped AS (
+                SELECT canonical_variant,
+                       MIN(make) AS make,
+                       COUNT(*) AS listing_count,
+                       COUNT(DISTINCT provider) AS source_count,
+                       ROUND(MIN(price_eur)::numeric, 0) AS min_price,
+                       ROUND(MAX(price_eur)::numeric, 0) AS max_price,
+                       ROUND(AVG(price_eur)::numeric, 0) AS avg_price,
+                       ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_eur)::numeric, 0) AS median_price,
+                       (MAX(price_eur) - MIN(price_eur)) AS savings_eur,
+                       ROUND(((MAX(price_eur) - MIN(price_eur))
+                              / NULLIF(AVG(price_eur), 0) * 100)::numeric, 1) AS savings_pct
+                FROM cleaned
+                GROUP BY canonical_variant
+                HAVING COUNT(*) >= 2
+                   AND (MAX(price_eur) - MIN(price_eur)) > 500
+            )
+            SELECT * FROM grouped
+            WHERE savings_pct BETWEEN 3 AND 300
+            ORDER BY savings_eur DESC
+            LIMIT :lim
+        """)
+        rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
+
+        for row in rows:
+            cv = row["canonical_variant"]
+            c = db.execute(text("""
+                SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type, year
+                FROM carhero.car_listings
+                WHERE canonical_variant = :cv AND status = 'active' AND price_eur > 500
+                ORDER BY price_eur ASC LIMIT 1
+            """), {"cv": cv}).first()
+            if c:
+                row["cheap_price"] = float(c.price_eur)
+                row["cheap_country"] = c.country
+                row["cheap_provider"] = c.provider
+                row["cheap_url"] = c.source_url
+                row["cheap_km"] = c.mileage_km
+                row["cheap_variant"] = c.variant
+                row["cheap_fuel"] = c.fuel_type
+                row["cheap_year"] = c.year
+
+            p = db.execute(text("""
+                SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type, year
+                FROM carhero.car_listings
+                WHERE canonical_variant = :cv AND status = 'active' AND price_eur > 500
+                ORDER BY price_eur DESC LIMIT 1
+            """), {"cv": cv}).first()
+            if p:
+                row["expensive_price"] = float(p.price_eur)
+                row["expensive_country"] = p.country
+                row["expensive_provider"] = p.provider
+                row["expensive_url"] = p.source_url
+                row["expensive_km"] = p.mileage_km
+                row["expensive_variant"] = p.variant
+                row["expensive_fuel"] = p.fuel_type
+                row["expensive_year"] = p.year
+
+        return rows
+    finally:
+        db.close()
+
+
 def scan_price_drops(limit: int = 10) -> list[dict]:
     """Listings whose price dropped in the latest scrape vs their previous price."""
     from db import SessionLocal
@@ -229,6 +326,7 @@ def build_digest_html(
     comparisons: list[dict],
     price_drops: list[dict] | None = None,
     stats: dict | None = None,
+    variant_comparisons: list[dict] | None = None,
 ) -> str:
     now = datetime.now()
     today = now.strftime("%A, %B %d, %Y")
@@ -284,6 +382,61 @@ def build_digest_html(
             Prices reduced since last scrape.
         </p>
         {drop_cards}
+    </div>"""
+
+    # --- Variant comparisons section ---
+    variant_html = ""
+    if variant_comparisons:
+        vcards = ""
+        for d in variant_comparisons:
+            savings_pct = float(d.get("savings_pct") or 0)
+            savings_eur = float(d.get("savings_eur") or 0)
+            badge_color = "#16A34A" if savings_pct >= 15 else "#F59E0B" if savings_pct >= 8 else "#6B7280"
+            cheap_src = _source_label(d.get("cheap_country"), d.get("cheap_provider"))
+            expensive_src = _source_label(d.get("expensive_country"), d.get("expensive_provider"))
+            cheap_url = d.get("cheap_url") or ""
+            expensive_url = d.get("expensive_url") or ""
+            cheap_link = f'<a href="{cheap_url}" style="font-size:11px; color:#15803D; text-decoration:underline;">View listing</a>' if cheap_url else ""
+            expensive_link = f'<a href="{expensive_url}" style="font-size:11px; color:#991B1B; text-decoration:underline;">View listing</a>' if expensive_url else ""
+            cheap_km = f"{int(d['cheap_km']):,} km" if d.get("cheap_km") else ""
+            exp_km = f"{int(d['expensive_km']):,} km" if d.get("expensive_km") else ""
+
+            vcards += f"""
+            <div style="border:1px solid #E5E7EB; border-radius:8px; padding:12px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px;">
+                    <div>
+                        <strong style="font-size:14px; color:#1A1A1A;">{d['canonical_variant']}</strong>
+                        <span style="display:inline-block; background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:600; padding:1px 6px; border-radius:8px; margin-left:4px;">Verified</span>
+                        <br><span style="font-size:11px; color:#9CA3AF;">{int(d.get('listing_count') or 0)} listings &middot; {int(d.get('source_count') or 0)} sources &middot; median {_fmt_eur(d.get('median_price'))}</span>
+                    </div>
+                    <span style="background:{badge_color}; color:white; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600; white-space:nowrap;">
+                        Save {_fmt_eur(savings_eur)} ({savings_pct:.0f}%)
+                    </span>
+                </div>
+                <!--[if mso]><table width="100%"><tr><td width="48%" valign="top"><![endif]-->
+                <div style="display:inline-block; width:48%; vertical-align:top; min-width:140px; background:#F0FDF4; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
+                    <div style="font-size:10px; color:#16A34A; font-weight:600; text-transform:uppercase;">Cheapest</div>
+                    <div style="font-size:15px; font-weight:700; color:#15803D;">{_fmt_eur(d.get('cheap_price'))}</div>
+                    <div style="font-size:11px; color:#6B7280;">{cheap_src}{(' &middot; ' + cheap_km) if cheap_km else ''}</div>
+                    {cheap_link}
+                </div>
+                <!--[if mso]></td><td width="4%"></td><td width="48%" valign="top"><![endif]-->
+                <div style="display:inline-block; width:48%; vertical-align:top; min-width:140px; background:#FEF2F2; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
+                    <div style="font-size:10px; color:#DC2626; font-weight:600; text-transform:uppercase;">Most Expensive</div>
+                    <div style="font-size:15px; font-weight:700; color:#991B1B;">{_fmt_eur(d.get('expensive_price'))}</div>
+                    <div style="font-size:11px; color:#6B7280;">{expensive_src}{(' &middot; ' + exp_km) if exp_km else ''}</div>
+                    {expensive_link}
+                </div>
+                <!--[if mso]></td></tr></table><![endif]-->
+            </div>"""
+
+        variant_html = f"""
+    <div style="background:#FFFFFF; border:1px solid #DBEAFE; border-radius:8px; padding:16px; margin-bottom:20px;">
+        <h2 style="color:#1A1A1A; font-size:16px; font-weight:600; margin:0 0 4px;">Verified Variant Deals</h2>
+        <p style="color:#6B7280; font-size:12px; margin:0 0 12px;">
+            Apples-to-apples comparisons for specific car variants across markets.
+        </p>
+        {vcards}
     </div>"""
 
     # --- Price comparisons section ---
@@ -347,6 +500,7 @@ def build_digest_html(
 
     {stats_html}
     {drops_html}
+    {variant_html}
 
     <!-- Price Comparisons -->
     <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:16px; margin-bottom:20px;">
@@ -380,6 +534,7 @@ def build_digest_text(
     comparisons: list[dict],
     price_drops: list[dict] | None = None,
     stats: dict | None = None,
+    variant_comparisons: list[dict] | None = None,
 ) -> str:
     now = datetime.now()
     today = now.strftime("%A, %B %d, %Y")
@@ -402,6 +557,22 @@ def build_digest_text(
             lines.append(f"  {d['make']} {d['model']} {d.get('year') or ''}")
             lines.append(f"    Was {_fmt_eur(d.get('old_price'))} -> Now {_fmt_eur(d.get('price_eur'))} (down {drop_pct:.0f}%)")
         lines.append("")
+
+    if variant_comparisons:
+        lines.append("VERIFIED VARIANT DEALS")
+        lines.append("-" * 44)
+        for d in variant_comparisons:
+            cheap_src = _source_label(d.get("cheap_country"), d.get("cheap_provider"))
+            expensive_src = _source_label(d.get("expensive_country"), d.get("expensive_provider"))
+            lines.append(f"  {d['canonical_variant']}  ({int(d.get('listing_count') or 0)} listings, median {_fmt_eur(d.get('median_price'))})")
+            lines.append(f"    Cheapest:  {_fmt_eur(d.get('cheap_price'))} ({cheap_src})")
+            if d.get("cheap_url"):
+                lines.append(f"               {d['cheap_url']}")
+            lines.append(f"    Expensive: {_fmt_eur(d.get('expensive_price'))} ({expensive_src})")
+            if d.get("expensive_url"):
+                lines.append(f"               {d['expensive_url']}")
+            lines.append(f"    Save {_fmt_eur(d.get('savings_eur'))} ({float(d.get('savings_pct') or 0):.0f}%)")
+            lines.append("")
 
     lines.append("BEST PRICE ARBITRAGE")
     lines.append("-" * 44)
