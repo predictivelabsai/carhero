@@ -82,23 +82,39 @@ def scan_price_comparisons(limit: int = 25) -> list[dict]:
                 FROM carhero.car_listings
                 WHERE status = 'active' AND price_eur > 500
                   AND year IS NOT NULL
+                  AND canonical_variant IS NULL
                   AND scraped_at > ({cutoff})
             ),
-            grouped AS (
+            medians AS (
                 SELECT make, model, year,
-                       COUNT(*) AS listing_count,
-                       COUNT(DISTINCT country || '/' || provider) AS source_count,
-                       ROUND(MIN(price_eur)::numeric, 0) AS min_price,
-                       ROUND(MAX(price_eur)::numeric, 0) AS max_price,
-                       ROUND(AVG(price_eur)::numeric, 0) AS avg_price,
-                       (MAX(price_eur) - MIN(price_eur)) AS savings_eur,
-                       ROUND(((MAX(price_eur) - MIN(price_eur))
-                              / NULLIF(AVG(price_eur), 0) * 100)::numeric, 1) AS savings_pct
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_eur) AS median_price
                 FROM fresh
                 GROUP BY make, model, year
+            ),
+            cleaned AS (
+                SELECT f.*
+                FROM fresh f
+                JOIN medians m USING (make, model, year)
+                WHERE f.price_eur < m.median_price * 5
+                  AND f.price_eur > m.median_price * 0.2
+            ),
+            grouped AS (
+                SELECT c.make, c.model, c.year,
+                       COUNT(*) AS listing_count,
+                       COUNT(DISTINCT c.country || '/' || c.provider) AS source_count,
+                       ROUND(MIN(c.price_eur)::numeric, 0) AS min_price,
+                       ROUND(MAX(c.price_eur)::numeric, 0) AS max_price,
+                       ROUND(AVG(c.price_eur)::numeric, 0) AS avg_price,
+                       ROUND(m.median_price::numeric, 0) AS median_price,
+                       (MAX(c.price_eur) - MIN(c.price_eur)) AS savings_eur,
+                       ROUND(((MAX(c.price_eur) - MIN(c.price_eur))
+                              / NULLIF(AVG(c.price_eur), 0) * 100)::numeric, 1) AS savings_pct
+                FROM cleaned c
+                JOIN medians m USING (make, model, year)
+                GROUP BY c.make, c.model, c.year, m.median_price
                 HAVING COUNT(*) >= 2
-                   AND COUNT(DISTINCT country || '/' || provider) >= 2
-                   AND (MAX(price_eur) - MIN(price_eur)) > 500
+                   AND COUNT(DISTINCT c.country || '/' || c.provider) >= 2
+                   AND (MAX(c.price_eur) - MIN(c.price_eur)) > 500
             )
             SELECT * FROM grouped
             WHERE savings_pct BETWEEN 5 AND 300
@@ -108,13 +124,18 @@ def scan_price_comparisons(limit: int = 25) -> list[dict]:
         rows = [dict(r._mapping) for r in db.execute(sql, {"lim": limit})]
 
         for row in rows:
-            c = db.execute(text("""
+            med = float(row["median_price"])
+            c = db.execute(text(f"""
                 SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type
                 FROM carhero.car_listings
                 WHERE make = :make AND model = :model AND year = :year
                   AND status = 'active' AND price_eur > 500
+                  AND canonical_variant IS NULL
+                  AND price_eur BETWEEN :lo AND :hi
+                  AND scraped_at > ({cutoff})
                 ORDER BY price_eur ASC LIMIT 1
-            """), {"make": row["make"], "model": row["model"], "year": row["year"]}).first()
+            """), {"make": row["make"], "model": row["model"], "year": row["year"],
+                   "lo": med * 0.2, "hi": med * 5}).first()
             if c:
                 row["cheap_price"] = float(c.price_eur)
                 row["cheap_country"] = c.country
@@ -124,13 +145,17 @@ def scan_price_comparisons(limit: int = 25) -> list[dict]:
                 row["cheap_variant"] = c.variant
                 row["cheap_fuel"] = c.fuel_type
 
-            p = db.execute(text("""
+            p = db.execute(text(f"""
                 SELECT id, price_eur, country, provider, source_url, mileage_km, variant, fuel_type
                 FROM carhero.car_listings
                 WHERE make = :make AND model = :model AND year = :year
                   AND status = 'active' AND price_eur > 500
+                  AND canonical_variant IS NULL
+                  AND price_eur BETWEEN :lo AND :hi
+                  AND scraped_at > ({cutoff})
                 ORDER BY price_eur DESC LIMIT 1
-            """), {"make": row["make"], "model": row["model"], "year": row["year"]}).first()
+            """), {"make": row["make"], "model": row["model"], "year": row["year"],
+                   "lo": med * 0.2, "hi": med * 5}).first()
             if p:
                 row["expensive_price"] = float(p.price_eur)
                 row["expensive_country"] = p.country
