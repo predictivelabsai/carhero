@@ -24,7 +24,10 @@ def _load_system_prompt(slug: str) -> str:
     specific = specific_file.read_text() if specific_file.exists() else ""
     if not specific:
         log.warning("no system prompt for %s -- using shared context only", slug)
-    return (shared + "\n\n" + specific).strip()
+    voice_file = PROMPTS_DIR / "voice.md"
+    voice = voice_file.read_text() if slug == "kenri" and voice_file.exists() else ""
+    parts = [shared, specific, voice]
+    return "\n\n".join(p for p in parts if p).strip()
 
 
 def build_agent(spec: AgentSpec, tools: list[BaseTool]):
