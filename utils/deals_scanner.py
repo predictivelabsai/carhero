@@ -400,9 +400,13 @@ def build_digest_html(
             expensive_link = f'<a href="{expensive_url}" style="font-size:11px; color:#991B1B; text-decoration:underline;">View listing</a>' if expensive_url else ""
             cheap_km = f"{int(d['cheap_km']):,} km" if d.get("cheap_km") else ""
             exp_km = f"{int(d['expensive_km']):,} km" if d.get("expensive_km") else ""
+            cheap_yr = str(d['cheap_year']) if d.get("cheap_year") else ""
+            exp_yr = str(d['expensive_year']) if d.get("expensive_year") else ""
+            cheap_meta = " &middot; ".join(filter(None, [cheap_src, cheap_yr, cheap_km]))
+            exp_meta = " &middot; ".join(filter(None, [expensive_src, exp_yr, exp_km]))
 
             vcards += f"""
-            <div style="border:1px solid #E5E7EB; border-radius:8px; padding:12px; margin-bottom:8px;">
+            <div style="border:1px solid #DBEAFE; border-radius:8px; padding:12px; margin-bottom:8px;">
                 <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px;">
                     <div>
                         <strong style="font-size:14px; color:#1A1A1A;">{d['canonical_variant']}</strong>
@@ -414,17 +418,17 @@ def build_digest_html(
                     </span>
                 </div>
                 <!--[if mso]><table width="100%"><tr><td width="48%" valign="top"><![endif]-->
-                <div style="display:inline-block; width:48%; vertical-align:top; min-width:140px; background:#F0FDF4; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
+                <div style="display:inline-block; width:48%; vertical-align:top; min-width:120px; background:#F0FDF4; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
                     <div style="font-size:10px; color:#16A34A; font-weight:600; text-transform:uppercase;">Cheapest</div>
                     <div style="font-size:15px; font-weight:700; color:#15803D;">{_fmt_eur(d.get('cheap_price'))}</div>
-                    <div style="font-size:11px; color:#6B7280;">{cheap_src}{(' &middot; ' + cheap_km) if cheap_km else ''}</div>
+                    <div style="font-size:11px; color:#6B7280;">{cheap_meta}</div>
                     {cheap_link}
                 </div>
                 <!--[if mso]></td><td width="4%"></td><td width="48%" valign="top"><![endif]-->
-                <div style="display:inline-block; width:48%; vertical-align:top; min-width:140px; background:#FEF2F2; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
+                <div style="display:inline-block; width:48%; vertical-align:top; min-width:120px; background:#FEF2F2; border-radius:6px; padding:8px; margin-top:8px; box-sizing:border-box;">
                     <div style="font-size:10px; color:#DC2626; font-weight:600; text-transform:uppercase;">Most Expensive</div>
                     <div style="font-size:15px; font-weight:700; color:#991B1B;">{_fmt_eur(d.get('expensive_price'))}</div>
-                    <div style="font-size:11px; color:#6B7280;">{expensive_src}{(' &middot; ' + exp_km) if exp_km else ''}</div>
+                    <div style="font-size:11px; color:#6B7280;">{exp_meta}</div>
                     {expensive_link}
                 </div>
                 <!--[if mso]></td></tr></table><![endif]-->
@@ -564,11 +568,15 @@ def build_digest_text(
         for d in variant_comparisons:
             cheap_src = _source_label(d.get("cheap_country"), d.get("cheap_provider"))
             expensive_src = _source_label(d.get("expensive_country"), d.get("expensive_provider"))
+            cheap_yr = f" ({d['cheap_year']})" if d.get("cheap_year") else ""
+            exp_yr = f" ({d['expensive_year']})" if d.get("expensive_year") else ""
+            cheap_km = f", {int(d['cheap_km']):,} km" if d.get("cheap_km") else ""
+            exp_km = f", {int(d['expensive_km']):,} km" if d.get("expensive_km") else ""
             lines.append(f"  {d['canonical_variant']}  ({int(d.get('listing_count') or 0)} listings, median {_fmt_eur(d.get('median_price'))})")
-            lines.append(f"    Cheapest:  {_fmt_eur(d.get('cheap_price'))} ({cheap_src})")
+            lines.append(f"    Cheapest:  {_fmt_eur(d.get('cheap_price'))} ({cheap_src}{cheap_yr}{cheap_km})")
             if d.get("cheap_url"):
                 lines.append(f"               {d['cheap_url']}")
-            lines.append(f"    Expensive: {_fmt_eur(d.get('expensive_price'))} ({expensive_src})")
+            lines.append(f"    Expensive: {_fmt_eur(d.get('expensive_price'))} ({expensive_src}{exp_yr}{exp_km})")
             if d.get("expensive_url"):
                 lines.append(f"               {d['expensive_url']}")
             lines.append(f"    Save {_fmt_eur(d.get('savings_eur'))} ({float(d.get('savings_pct') or 0):.0f}%)")

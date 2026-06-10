@@ -390,7 +390,11 @@ _PAGE_JS = """
                 const color = pct >= 15 ? '#16A34A' : pct >= 8 ? '#F59E0B' : '#6B7280';
                 const cheapKm = kmLabel(d.cheap_km);
                 const expKm = kmLabel(d.expensive_km);
-                return '<div class="scan-card">' +
+                const cheapYr = d.cheap_year ? String(d.cheap_year) : '';
+                const expYr = d.expensive_year ? String(d.expensive_year) : '';
+                const cheapMeta = [srcLabel(d.cheap_country, d.cheap_provider), cheapYr, cheapKm].filter(Boolean).join(' \\u00B7 ');
+                const expMeta = [srcLabel(d.expensive_country, d.expensive_provider), expYr, expKm].filter(Boolean).join(' \\u00B7 ');
+                return '<div class="scan-card" style="border-color:#DBEAFE;">' +
                     '<div class="scan-card-header">' +
                         '<div><strong style="font-size:14px;">' + d.canonical_variant + '</strong>' +
                         ' <span style="display:inline-block;background:#EFF6FF;color:#1D4ED8;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;">Verified</span>' +
@@ -401,13 +405,13 @@ _PAGE_JS = """
                         '<div class="scan-price-box" style="background:#F0FDF4;">' +
                             '<div style="font-size:10px;color:#16A34A;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Cheapest</div>' +
                             '<div style="font-size:15px;font-weight:700;color:#15803D;">' + fmtEur(d.cheap_price) + '</div>' +
-                            '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.cheap_country, d.cheap_provider) + (cheapKm ? ' \\u00B7 ' + cheapKm : '') + '</div>' +
+                            '<div style="font-size:11px;color:#6B7280;">' + cheapMeta + '</div>' +
                             '<div style="margin-top:4px;">' + viewLink(d.cheap_url) + '</div>' +
                         '</div>' +
                         '<div class="scan-price-box" style="background:#FEF2F2;">' +
                             '<div style="font-size:10px;color:#DC2626;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Most Expensive</div>' +
                             '<div style="font-size:15px;font-weight:700;color:#991B1B;">' + fmtEur(d.expensive_price) + '</div>' +
-                            '<div style="font-size:11px;color:#6B7280;">' + srcLabel(d.expensive_country, d.expensive_provider) + (expKm ? ' \\u00B7 ' + expKm : '') + '</div>' +
+                            '<div style="font-size:11px;color:#6B7280;">' + expMeta + '</div>' +
                             '<div style="margin-top:4px;">' + viewLink(d.expensive_url) + '</div>' +
                         '</div>' +
                     '</div>' +
