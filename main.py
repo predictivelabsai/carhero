@@ -7,6 +7,7 @@ from components.layout import app_styles, Page
 from pages.home import home_page
 from pages.about import about_page
 from pages.contact import contact_page
+from pages.legal import delete_account_page, privacy_page
 
 from starlette.responses import JSONResponse as _JSONResponse
 
@@ -48,6 +49,14 @@ def about(sess):
 @rt
 def contact(sess):
     return Page(contact_page(), active='contact', title='Contact', sess=sess)
+
+@rt
+def privacy(sess):
+    return Page(privacy_page(), title='Privacy Policy', sess=sess)
+
+@rt('/delete-account')
+def delete_account(sess):
+    return Page(delete_account_page(), title='Delete Account', sess=sess)
 
 
 # --- Chat routes (Phase 5) ---

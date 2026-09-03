@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth import create_token
+from api.account_deletion import delete_user_data
 from api.schemas import (
     LoginRequest, RegisterRequest, AuthResponse, UserInfo,
     ChatRequest, SessionSummary, SessionDetail, MessageOut, ShareResponse, SharedSessionOut,
@@ -161,6 +162,15 @@ def create_app(root_path: str = "") -> FastAPI:
         if not row:
             raise HTTPException(404, "User not found")
         return UserInfo(user_id=row.id, email=row.email, name=row.name or "")
+
+    @api.delete("/auth/account", tags=["auth"])
+    def delete_account(
+        user: dict = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        if not delete_user_data(db, user["user_id"]):
+            raise HTTPException(404, "User not found")
+        return {"ok": True}
 
     # ── Agents ────────────────────────────────────────────────────────
 
