@@ -8,7 +8,10 @@ load_dotenv()
 DB_URL = os.environ["DB_URL"]
 SCHEMA = "carhero"
 
-engine = create_engine(DB_URL, pool_pre_ping=True, pool_size=5, max_overflow=10)
+engine = create_engine(
+    DB_URL, pool_pre_ping=True, pool_size=2, max_overflow=3, pool_recycle=300,
+    connect_args={"application_name": os.getenv("DB_APPLICATION_NAME", "carhero")},
+)
 
 
 @event.listens_for(engine, "connect")
